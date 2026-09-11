@@ -136,36 +136,43 @@ export async function POST(request: NextRequest) {
     });
 
     // Génération du PDF et stockage direct dans le dossier du patient (colonne `pdf` du certificat).
-    const pdf = await genererCertificatPdf({
-      type: donnees.type,
-      nom: patient.nom,
-      prenom: patient.prenom,
-      ddn: patient.ddn,
-      rio: patient.rio,
-      grade: patient.grade,
-      specialite: patient.specialite,
-      ...donnees.sigycop,
-      ...donnees.aptitudes,
-      observations: donnees.observations,
-      conclusion: donnees.conclusion,
-      lieu: donnees.lieu,
-      dateCertificat,
-      medecinNomComplet: `${medecin.prenom} ${medecin.nom}`,
-      medecinGrade: medecin.grade,
-    });
+    // Non bloquant : le certificat est déjà enregistré, un échec ici ne doit jamais
+    // faire échouer la création aux yeux de l'utilisateur.
+    let certificatFinal = certificat;
+    try {
+      const pdf = await genererCertificatPdf({
+        type: donnees.type,
+        nom: patient.nom,
+        prenom: patient.prenom,
+        ddn: patient.ddn,
+        rio: patient.rio,
+        grade: patient.grade,
+        specialite: patient.specialite,
+        ...donnees.sigycop,
+        ...donnees.aptitudes,
+        observations: donnees.observations,
+        conclusion: donnees.conclusion,
+        lieu: donnees.lieu,
+        dateCertificat,
+        medecinNomComplet: `${medecin.prenom} ${medecin.nom}`,
+        medecinGrade: medecin.grade,
+      });
 
-    const certificatAvecPdf =
-      donnees.type === "ENGAGEMENT"
-        ? await prisma.certificatEngagement.update({
-            where: { id: certificat.id },
-            data: { pdf, pdfGenereLe: new Date() },
-          })
-        : await prisma.certificatSuiviAptitudes.update({
-            where: { id: certificat.id },
-            data: { pdf, pdfGenereLe: new Date() },
-          });
+      certificatFinal =
+        donnees.type === "ENGAGEMENT"
+          ? await prisma.certificatEngagement.update({
+              where: { id: certificat.id },
+              data: { pdf, pdfGenereLe: new Date() },
+            })
+          : await prisma.certificatSuiviAptitudes.update({
+              where: { id: certificat.id },
+              data: { pdf, pdfGenereLe: new Date() },
+            });
+    } catch (erreurPdf) {
+      console.error("[POST /api/certificats] Génération PDF échouée (certificat déjà enregistré)", erreurPdf);
+    }
 
-    const { pdf: _pdf, ...certificatSansPdf } = certificatAvecPdf;
+    const { pdf: _pdf, ...certificatSansPdf } = certificatFinal;
     return NextResponse.json({ certificat: certificatSansPdf }, { status: 201 });
   } catch (error) {
     if (error instanceof AccesRefuseError) {

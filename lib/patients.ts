@@ -159,6 +159,7 @@ export async function obtenirDossierCompletPatient(patientId: string) {
           id: true,
           medicaments: true,
           instructions: true,
+          lieu: true,
           datePrescription: true,
           pdfGenereLe: true,
           medecin: { select: { nom: true, prenom: true, grade: true } },

@@ -57,31 +57,40 @@ export async function POST(request: NextRequest) {
       data: {
         medicaments: donnees.medicaments,
         instructions: donnees.instructions,
+        lieu: donnees.lieu,
         datePrescription,
         medecinId: utilisateur.id,
         patientId: patient.id,
       },
     });
 
-    const pdf = await genererOrdonnancePdf({
-      patientNom: patient.nom,
-      patientPrenom: patient.prenom,
-      patientDdn: patient.ddn,
-      patientRio: patient.rio,
-      medicaments: donnees.medicaments,
-      instructions: donnees.instructions,
-      datePrescription,
-      lieu: donnees.lieu,
-      medecinNomComplet: `${medecin.prenom} ${medecin.nom}`,
-      medecinGrade: medecin.grade,
-    });
+    // Génération du PDF, stockée directement dans le dossier du patient.
+    // Non bloquant : l'ordonnance est déjà enregistrée, un échec ici ne doit
+    // jamais faire échouer la création aux yeux de l'utilisateur.
+    let prescriptionFinale = prescription;
+    try {
+      const pdf = await genererOrdonnancePdf({
+        patientNom: patient.nom,
+        patientPrenom: patient.prenom,
+        patientDdn: patient.ddn,
+        patientRio: patient.rio,
+        medicaments: donnees.medicaments,
+        instructions: donnees.instructions,
+        datePrescription,
+        lieu: donnees.lieu,
+        medecinNomComplet: `${medecin.prenom} ${medecin.nom}`,
+        medecinGrade: medecin.grade,
+      });
 
-    const prescriptionAvecPdf = await prisma.prescription.update({
-      where: { id: prescription.id },
-      data: { pdf, pdfGenereLe: new Date() },
-    });
+      prescriptionFinale = await prisma.prescription.update({
+        where: { id: prescription.id },
+        data: { pdf, pdfGenereLe: new Date() },
+      });
+    } catch (erreurPdf) {
+      console.error("[POST /api/prescriptions] Génération PDF échouée (ordonnance déjà enregistrée)", erreurPdf);
+    }
 
-    const { pdf: _pdf, ...prescriptionSansPdf } = prescriptionAvecPdf;
+    const { pdf: _pdf, ...prescriptionSansPdf } = prescriptionFinale;
     return NextResponse.json({ prescription: prescriptionSansPdf }, { status: 201 });
   } catch (error) {
     if (error instanceof AccesRefuseError) {
@@ -122,6 +131,7 @@ export async function GET(request: NextRequest) {
         id: true,
         medicaments: true,
         instructions: true,
+        lieu: true,
         datePrescription: true,
         pdfGenereLe: true,
         medecin: { select: { nom: true, prenom: true, grade: true } },

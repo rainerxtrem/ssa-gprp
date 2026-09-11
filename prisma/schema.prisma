@@ -285,6 +285,7 @@ model Prescription {
   id               String   @id @default(cuid())
   medicaments      Json
   instructions     String?  @db.Text
+  lieu             String   @default("")
   datePrescription DateTime @default(now())
 
   pdf         Bytes?
