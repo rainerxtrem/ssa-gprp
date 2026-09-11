@@ -1,11 +1,24 @@
-import React from "react";
-import { Document, Page, Text, View, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
+/** @jsxRuntime classic */
+/** @jsx React.createElement */
+
+// Next's App Router bundles every file under app/ (route handlers included)
+// through webpack with the "react-server" condition, which resolves `react`
+// to a restricted build. @react-pdf/renderer's reconciler expects elements
+// built with the plain client `react`. Loading both `react` and
+// `@react-pdf/renderer` via a real Node require (opaque to webpack thanks to
+// the eval indirection) sidesteps that condition entirely, so the elements
+// this file creates are recognized by react-pdf's renderer instead of
+// crashing with a minified React error #31.
 import {
   APTITUDE_STATUS_LABELS,
   CONCLUSION_ENGAGEMENT_LABELS,
   CONCLUSION_SUIVI_LABELS,
   SIGYCOP_MENTION_LEGALE,
 } from "@/lib/sigycop";
+
+const nodeRequire = eval("require") as NodeRequire;
+const React = nodeRequire("react");
+const { Document, Page, Text, View, StyleSheet, renderToBuffer } = nodeRequire("@react-pdf/renderer");
 
 type AptitudeStatus = "APTE" | "APTE_RESTRICTION" | "INAPTE" | "NON_EVALUE";
 
