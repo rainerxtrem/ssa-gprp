@@ -6,6 +6,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Field, FieldTextarea } from "@/components/ui/Field";
 import { bouton, champClasses, labelClasses } from "@/lib/ui";
+import { BIBLIOTHEQUE_MEDICAMENTS, analyserLigneMedicament } from "@/lib/medicaments";
 
 interface LigneMedicament {
   nom: string;
@@ -25,6 +26,21 @@ export default function OrdonnanceForm({ patientId }: { patientId: string }) {
 
   function majLigne(index: number, champ: keyof LigneMedicament, valeur: string) {
     setMedicaments((lignes) => lignes.map((l, i) => (i === index ? { ...l, [champ]: valeur } : l)));
+  }
+
+  function appliquerReferenceBibliotheque(index: number, cle: string) {
+    if (!cle) return;
+    const [categorie, nom] = cle.split("::");
+    const reference = BIBLIOTHEQUE_MEDICAMENTS[categorie]?.find((m) => m.nom === nom);
+    if (!reference) return;
+    const analyse = analyserLigneMedicament(reference.nom, reference.ligne);
+    setMedicaments((lignes) =>
+      lignes.map((l, i) =>
+        i === index
+          ? { ...l, nom: analyse.nom, dosage: analyse.dosage, posologie: analyse.posologie, duree: analyse.duree }
+          : l
+      )
+    );
   }
 
   function ajouterLigne() {
@@ -99,6 +115,27 @@ export default function OrdonnanceForm({ patientId }: { patientId: string }) {
                   </button>
                 )}
               </div>
+
+              <div className="mb-3">
+                <span className={labelClasses}>Choisir dans la bibliothèque</span>
+                <select
+                  defaultValue=""
+                  onChange={(e) => appliquerReferenceBibliotheque(index, e.target.value)}
+                  className={champClasses}
+                >
+                  <option value="">Personnalisé (saisie manuelle)</option>
+                  {Object.entries(BIBLIOTHEQUE_MEDICAMENTS).map(([categorie, medicaments]) => (
+                    <optgroup key={categorie} label={categorie}>
+                      {medicaments.map((m) => (
+                        <option key={`${categorie}::${m.nom}`} value={`${categorie}::${m.nom}`}>
+                          {m.nom}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div className="col-span-2 sm:col-span-1">
                   <span className={labelClasses}>Nom *</span>
