@@ -1,0 +1,283 @@
+// Schéma Prisma — SSA GPRP (Gestion du Personnel et des Régimes de Protection)
+// Base de données : PostgreSQL (Railway)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// ENUMS
+// ---------------------------------------------------------------------------
+
+enum Role {
+  // Médicaux
+  MEDECIN_CHEF
+  MEDECIN_PRINCIPAL
+  MEDECIN_ARMES
+  INTERNE_MEDECINE
+  EXTERNE_MEDECINE
+  // Paramédicaux
+  CADRE_SANTE
+  INFIRMIER_MAJOR
+  INFIRMIER_ANESTHESISTE
+  INFIRMIER
+  ETUDIANT_INFIRMIER
+  // Commandement
+  COMMANDEMENT
+}
+
+enum AptitudeStatus {
+  APTE
+  APTE_RESTRICTION
+  INAPTE
+  NON_EVALUE
+}
+
+enum ConclusionEngagement {
+  APTE_ENGAGEMENT
+  INAPTE_TEMPORAIRE
+  INAPTE
+  AJOURNEMENT
+}
+
+enum ConclusionSuivi {
+  APTE_A_SERVIR
+  APTE_A_SERVIR_AVEC_RESTRICTION
+  INAPTE_TEMPORAIRE_A_SERVIR
+  INAPTE_DEFINITIF_A_SERVIR
+}
+
+enum TypeExemption {
+  ARRET_TRAVAIL
+  EXEMPTION_SPORT
+  EXEMPTION_SERVICE
+  PERMISSION_EXCEPTIONNELLE
+  CONVALESCENCE
+}
+
+// ---------------------------------------------------------------------------
+// MODELS
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  nom          String
+  prenom       String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  grade        String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  profilsSigycopEvalues ProfilSigycop[]            @relation("MedecinProfilsSigycop")
+  certificatsEngagement CertificatEngagement[]     @relation("MedecinCertificatsEngagement")
+  certificatsSuivi      CertificatSuiviAptitudes[] @relation("MedecinCertificatsSuivi")
+  prescriptions         Prescription[]             @relation("MedecinPrescriptions")
+  arretsTravail         ArretTravail[]             @relation("MedecinArretsTravail")
+
+  @@map("users")
+}
+
+model Patient {
+  id         String   @id @default(cuid())
+  rio        String   @unique // Identifiant défense
+  nom        String
+  prenom     String
+  ddn        DateTime
+  grade      String
+  specialite String?
+  unite      String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  profilsSigycop        ProfilSigycop[]
+  certificatsEngagement CertificatEngagement[]
+  certificatsSuivi      CertificatSuiviAptitudes[]
+  prescriptions         Prescription[]
+  arretsTravail         ArretTravail[]
+
+  @@map("patients")
+}
+
+/// Seuils réglementaires d'inaptitude par défaut : S2 I2 G2 Y3 C3 O2 P1
+/// (voir lib/sigycop.ts::SIGYCOP_SEUILS_INAPTITUDE)
+model ProfilSigycop {
+  id             String   @id @default(cuid())
+  s              Int      @default(1)
+  i              Int      @default(1)
+  g              Int      @default(1)
+  y              Int      @default(1)
+  c              Int      @default(1)
+  o              Int      @default(1)
+  p              Int      @default(1)
+  dateEvaluation DateTime @default(now())
+
+  medecin   User   @relation("MedecinProfilsSigycop", fields: [medecinId], references: [id])
+  medecinId String
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId String
+
+  certificatsEngagement CertificatEngagement[]
+  certificatsSuivi      CertificatSuiviAptitudes[]
+
+  createdAt DateTime @default(now())
+
+  @@index([patientId])
+  @@map("profils_sigycop")
+}
+
+model CertificatEngagement {
+  id String @id @default(cuid())
+
+  // En-tête (dénormalisé depuis Patient au moment de l'édition pour figer le document)
+  nom    String
+  prenom String
+  ddn    DateTime
+  rio    String
+
+  // Grille SIGYCOP figée sur le certificat
+  s Int
+  i Int
+  g Int
+  y Int
+  c Int
+  o Int
+  p Int
+
+  // Tableau des aptitudes
+  aptitudeGeneraleSPP  AptitudeStatus @default(NON_EVALUE) // Aptitude générale au service / engagement (SAPEURS-POMPIERS DE PARIS)
+  aptitudeInitialeGES  AptitudeStatus @default(NON_EVALUE)
+  aptitudeMIR          AptitudeStatus @default(NON_EVALUE)
+  aptitudeGRIMP        AptitudeStatus @default(NON_EVALUE)
+  aptitudeNRBCe        AptitudeStatus @default(NON_EVALUE)
+  aptitudeGHSC         AptitudeStatus @default(NON_EVALUE)
+  conduiteGroupeLeger  AptitudeStatus @default(NON_EVALUE)
+  conduiteGroupeLourd  AptitudeStatus @default(NON_EVALUE)
+  opex                 AptitudeStatus @default(NON_EVALUE)
+  contreIndicationEPMS Boolean        @default(false)
+
+  observations   String?              @db.Text
+  conclusion     ConclusionEngagement
+  lieu           String
+  dateCertificat DateTime             @default(now())
+
+  // PDF généré à la création et stocké directement dans le dossier du patient.
+  pdf          Bytes?
+  pdfGenereLe  DateTime?
+
+  medecin          User   @relation("MedecinCertificatsEngagement", fields: [medecinId], references: [id])
+  medecinId        String
+  medecinSignature String? // dataURL/base64 ou référence vers un fichier de signature
+
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId String
+
+  profilSigycop   ProfilSigycop? @relation(fields: [profilSigycopId], references: [id])
+  profilSigycopId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId])
+  @@map("certificats_engagement")
+}
+
+model CertificatSuiviAptitudes {
+  id String @id @default(cuid())
+
+  nom    String
+  prenom String
+  ddn    DateTime
+  rio    String
+
+  s Int
+  i Int
+  g Int
+  y Int
+  c Int
+  o Int
+  p Int
+
+  aptitudeGeneraleSPP  AptitudeStatus @default(NON_EVALUE)
+  aptitudeInitialeGES  AptitudeStatus @default(NON_EVALUE)
+  aptitudeMIR          AptitudeStatus @default(NON_EVALUE)
+  aptitudeGRIMP        AptitudeStatus @default(NON_EVALUE)
+  aptitudeNRBCe        AptitudeStatus @default(NON_EVALUE)
+  aptitudeGHSC         AptitudeStatus @default(NON_EVALUE)
+  conduiteGroupeLeger  AptitudeStatus @default(NON_EVALUE)
+  conduiteGroupeLourd  AptitudeStatus @default(NON_EVALUE)
+  opex                 AptitudeStatus @default(NON_EVALUE)
+  contreIndicationEPMS Boolean        @default(false)
+
+  observations   String?          @db.Text
+  conclusion     ConclusionSuivi
+  lieu           String
+  dateCertificat DateTime         @default(now())
+
+  // PDF généré à la création et stocké directement dans le dossier du patient.
+  pdf          Bytes?
+  pdfGenereLe  DateTime?
+
+  medecin          User   @relation("MedecinCertificatsSuivi", fields: [medecinId], references: [id])
+  medecinId        String
+  medecinSignature String?
+
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId String
+
+  profilSigycop   ProfilSigycop? @relation(fields: [profilSigycopId], references: [id])
+  profilSigycopId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId])
+  @@map("certificats_suivi_aptitudes")
+}
+
+model Prescription {
+  id               String   @id @default(cuid())
+  medicaments      Json // [{ nom, dosage, forme }]
+  posologie        String
+  duree            String
+  instructions     String?  @db.Text
+  datePrescription DateTime @default(now())
+
+  medecin   User   @relation("MedecinPrescriptions", fields: [medecinId], references: [id])
+  medecinId String
+
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId String
+
+  createdAt DateTime @default(now())
+
+  @@index([patientId])
+  @@map("prescriptions")
+}
+
+model ArretTravail {
+  id                   String        @id @default(cuid())
+  dateDebut            DateTime
+  dateFin              DateTime
+  typeExemption        TypeExemption
+  motif                String?       @db.Text // Secret médical : jamais exposé au COMMANDEMENT
+  transmisCommandement Boolean       @default(false)
+
+  medecin   User   @relation("MedecinArretsTravail", fields: [medecinId], references: [id])
+  medecinId String
+
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId])
+  @@map("arrets_travail")
+}
