@@ -78,6 +78,7 @@ model User {
   profilsSigycopEvalues ProfilSigycop[]            @relation("MedecinProfilsSigycop")
   certificatsEngagement CertificatEngagement[]     @relation("MedecinCertificatsEngagement")
   certificatsSuivi      CertificatSuiviAptitudes[] @relation("MedecinCertificatsSuivi")
+  consultations         Consultation[]             @relation("MedecinConsultations")
   prescriptions         Prescription[]             @relation("MedecinPrescriptions")
   arretsTravail         ArretTravail[]             @relation("MedecinArretsTravail")
 
@@ -99,6 +100,7 @@ model Patient {
   profilsSigycop        ProfilSigycop[]
   certificatsEngagement CertificatEngagement[]
   certificatsSuivi      CertificatSuiviAptitudes[]
+  consultations         Consultation[]
   prescriptions         Prescription[]
   arretsTravail         ArretTravail[]
 
@@ -241,13 +243,52 @@ model CertificatSuiviAptitudes {
   @@map("certificats_suivi_aptitudes")
 }
 
+/// Consultation de médecine classique (motif, examen clinique, constantes, diagnostic).
+/// Distincte des certificats d'aptitude : c'est le suivi médical courant du patient.
+model Consultation {
+  id               String   @id @default(cuid())
+  dateConsultation DateTime @default(now())
+
+  motif           String
+  anamnese        String? @db.Text
+  examenClinique  String? @db.Text
+
+  // Constantes relevées pendant la consultation
+  temperature        Float?
+  tensionSystolique  Int?
+  tensionDiastolique Int?
+  frequenceCardiaque Int?
+  saturationO2       Int?
+  poids              Float?
+  taille             Float?
+
+  diagnostic      String? @db.Text
+  conduiteATenir  String? @db.Text
+
+  medecin   User   @relation("MedecinConsultations", fields: [medecinId], references: [id])
+  medecinId String
+
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId])
+  @@map("consultations")
+}
+
+/// Ordonnance : chaque ligne de `medicaments` porte sa propre posologie
+/// ([{ nom, dosage, forme, posologie, duree }]). Le PDF généré est stocké
+/// directement dans le dossier du patient, au même titre que les certificats.
 model Prescription {
   id               String   @id @default(cuid())
-  medicaments      Json // [{ nom, dosage, forme }]
-  posologie        String
-  duree            String
+  medicaments      Json
   instructions     String?  @db.Text
   datePrescription DateTime @default(now())
+
+  pdf         Bytes?
+  pdfGenereLe DateTime?
 
   medecin   User   @relation("MedecinPrescriptions", fields: [medecinId], references: [id])
   medecinId String

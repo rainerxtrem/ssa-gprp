@@ -2,22 +2,25 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import CertificatSuiviAptitudes, {
-  type CertificatSuiviAptitudesData,
-} from "@/components/CertificatSuiviAptitudes";
+import CertificatAptitudeForm, {
+  type CertificatAptitudeData,
+  type CertificatType,
+} from "@/components/certificats/CertificatAptitudeForm";
 
 export default function NouveauCertificatClient({
+  type,
   patientId,
   donneesInitiales,
 }: {
+  type: CertificatType;
   patientId: string;
-  donneesInitiales: CertificatSuiviAptitudesData;
+  donneesInitiales: CertificatAptitudeData;
 }) {
   const router = useRouter();
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
 
-  async function onSubmit(data: CertificatSuiviAptitudesData) {
+  async function onSubmit(data: CertificatAptitudeData) {
     if (!data.conclusion) {
       setErreur("Merci de sélectionner une conclusion.");
       return;
@@ -34,7 +37,7 @@ export default function NouveauCertificatClient({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        type: "SUIVI",
+        type,
         patientId,
         sigycop: { s: data.s, i: data.i, g: data.g, y: data.y, c: data.c, o: data.o, p: data.p },
         aptitudes: {
@@ -64,21 +67,21 @@ export default function NouveauCertificatClient({
       return;
     }
 
-    router.push(`/dashboard/patients/${patientId}`);
+    router.push(`/dashboard/patients/${patientId}?onglet=aptitudes`);
     router.refresh();
   }
 
   return (
     <div>
       {erreur && (
-        <p className="mx-auto mb-4 max-w-3xl rounded-md bg-red-50 px-4 py-2 text-sm text-red-700 print:hidden">
+        <p className="mx-auto mb-4 max-w-3xl rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700 print:hidden">
           {erreur}
         </p>
       )}
       {enCours && (
         <p className="mx-auto mb-4 max-w-3xl text-sm text-slate-500 print:hidden">Enregistrement en cours...</p>
       )}
-      <CertificatSuiviAptitudes data={donneesInitiales} editable onSubmit={onSubmit} />
+      <CertificatAptitudeForm type={type} data={donneesInitiales} editable onSubmit={onSubmit} />
     </div>
   );
 }

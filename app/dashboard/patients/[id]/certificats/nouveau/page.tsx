@@ -3,11 +3,21 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { peutSignerCertificatAptitude } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
+import { PageHeader } from "@/components/ui/PageHeader";
 import NouveauCertificatClient from "./NouveauCertificatClient";
-import type { CertificatSuiviAptitudesData } from "@/components/CertificatSuiviAptitudes";
+import type { CertificatAptitudeData, CertificatType } from "@/components/certificats/CertificatAptitudeForm";
 
-export default async function NouveauCertificatPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function NouveauCertificatPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ type?: string }>;
+}) {
   const { id } = await params;
+  const { type: typeParam } = await searchParams;
+  const type: CertificatType = typeParam === "ENGAGEMENT" ? "ENGAGEMENT" : "SUIVI";
+
   const session = await getServerSession(authOptions);
   if (!peutSignerCertificatAptitude(session!.user.role)) {
     redirect(`/dashboard/patients/${id}`);
@@ -19,7 +29,7 @@ export default async function NouveauCertificatPage({ params }: { params: Promis
   });
   if (!patient) notFound();
 
-  const donneesInitiales: CertificatSuiviAptitudesData = {
+  const donneesInitiales: CertificatAptitudeData = {
     nom: patient.nom,
     prenom: patient.prenom,
     ddn: patient.ddn.toISOString(),
@@ -52,9 +62,13 @@ export default async function NouveauCertificatPage({ params }: { params: Promis
   };
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-bold print:hidden">Nouveau certificat de suivi des aptitudes</h1>
-      <NouveauCertificatClient patientId={patient.id} donneesInitiales={donneesInitiales} />
+    <div>
+      <PageHeader
+        title={type === "ENGAGEMENT" ? "Nouveau certificat d'engagement" : "Nouveau certificat de suivi des aptitudes"}
+        backHref={`/dashboard/patients/${id}?onglet=aptitudes`}
+        backLabel="Retour au dossier"
+      />
+      <NouveauCertificatClient type={type} patientId={patient.id} donneesInitiales={donneesInitiales} />
     </div>
   );
 }

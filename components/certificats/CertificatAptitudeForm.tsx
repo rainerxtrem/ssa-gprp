@@ -1,20 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import { Printer, Save } from "lucide-react";
 import {
   APTITUDE_STATUS_LABELS,
+  CONCLUSION_ENGAGEMENT_LABELS,
   CONCLUSION_SUIVI_LABELS,
   SIGYCOP_MENTION_LEGALE,
 } from "@/lib/sigycop";
+import { bouton } from "@/lib/ui";
 
+export type CertificatType = "ENGAGEMENT" | "SUIVI";
 type AptitudeStatus = "APTE" | "APTE_RESTRICTION" | "INAPTE" | "NON_EVALUE";
-type ConclusionSuivi =
-  | "APTE_A_SERVIR"
-  | "APTE_A_SERVIR_AVEC_RESTRICTION"
-  | "INAPTE_TEMPORAIRE_A_SERVIR"
-  | "INAPTE_DEFINITIF_A_SERVIR";
 
-export interface CertificatSuiviAptitudesData {
+export interface CertificatAptitudeData {
   // En-tête
   nom: string;
   prenom: string;
@@ -45,23 +44,24 @@ export interface CertificatSuiviAptitudesData {
   contreIndicationEPMS: boolean;
 
   observations?: string | null;
-  conclusion: ConclusionSuivi | null;
+  conclusion: string | null;
   lieu: string;
   dateCertificat: string;
   medecinNomComplet: string;
   medecinGrade: string;
 }
 
-interface CertificatSuiviAptitudesProps {
-  data: CertificatSuiviAptitudesData;
-  /** Passe-plat un composant en mode formulaire éditable (défaut : lecture seule / impression). */
+interface CertificatAptitudeFormProps {
+  type: CertificatType;
+  data: CertificatAptitudeData;
+  /** Passe le composant en mode formulaire éditable (défaut : lecture seule / impression). */
   editable?: boolean;
-  onChange?: (data: CertificatSuiviAptitudesData) => void;
+  onChange?: (data: CertificatAptitudeData) => void;
   /** Callback appelé lors de la soumission en mode éditable. */
-  onSubmit?: (data: CertificatSuiviAptitudesData) => void;
+  onSubmit?: (data: CertificatAptitudeData) => void;
 }
 
-const LIGNES_APTITUDES: { cle: keyof CertificatSuiviAptitudesData; label: string }[] = [
+const LIGNES_APTITUDES: { cle: keyof CertificatAptitudeData; label: string }[] = [
   { cle: "aptitudeGeneraleSPP", label: "Aptitude générale au service — SAPEURS-POMPIERS DE PARIS" },
   { cle: "aptitudeInitialeGES", label: "Aptitude initiale GES" },
   { cle: "aptitudeMIR", label: "Spécialité MIR" },
@@ -83,12 +83,14 @@ const SIGYCOP_LETTRES: { cle: "s" | "i" | "g" | "y" | "c" | "o" | "p"; label: st
   { cle: "p", label: "P" },
 ];
 
-const CONCLUSIONS: ConclusionSuivi[] = [
-  "APTE_A_SERVIR",
-  "APTE_A_SERVIR_AVEC_RESTRICTION",
-  "INAPTE_TEMPORAIRE_A_SERVIR",
-  "INAPTE_DEFINITIF_A_SERVIR",
-];
+const TITRES: Record<CertificatType, string> = {
+  ENGAGEMENT: "Certificat médical d'engagement",
+  SUIVI: "Certificat de suivi des aptitudes",
+};
+
+function labelsConclusion(type: CertificatType): Record<string, string> {
+  return type === "ENGAGEMENT" ? CONCLUSION_ENGAGEMENT_LABELS : CONCLUSION_SUIVI_LABELS;
+}
 
 function formatDateFr(iso: string): string {
   if (!iso) return "";
@@ -97,18 +99,18 @@ function formatDateFr(iso: string): string {
   return date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-export default function CertificatSuiviAptitudes({
+export default function CertificatAptitudeForm({
+  type,
   data,
   editable = false,
   onChange,
   onSubmit,
-}: CertificatSuiviAptitudesProps) {
-  const [local, setLocal] = useState<CertificatSuiviAptitudesData>(data);
+}: CertificatAptitudeFormProps) {
+  const [local, setLocal] = useState<CertificatAptitudeData>(data);
+  const labels = labelsConclusion(type);
+  const conclusions = Object.keys(labels);
 
-  function update<K extends keyof CertificatSuiviAptitudesData>(
-    cle: K,
-    valeur: CertificatSuiviAptitudesData[K]
-  ) {
+  function update<K extends keyof CertificatAptitudeData>(cle: K, valeur: CertificatAptitudeData[K]) {
     const suivant = { ...local, [cle]: valeur };
     setLocal(suivant);
     onChange?.(suivant);
@@ -125,31 +127,21 @@ export default function CertificatSuiviAptitudes({
 
       <div className="mb-4 flex justify-end gap-2 print:hidden">
         {editable && onSubmit && (
-          <button
-            type="button"
-            onClick={() => onSubmit(local)}
-            className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
-          >
+          <button type="button" onClick={() => onSubmit(local)} className={bouton("primaire")}>
+            <Save className="h-4 w-4" />
             Enregistrer le certificat
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => window.print()}
-          className="rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900"
-        >
-          Imprimer / Exporter PDF
+        <button type="button" onClick={() => window.print()} className={bouton("secondaire")}>
+          <Printer className="h-4 w-4" />
+          Imprimer / PDF
         </button>
       </div>
 
       <div className="border border-slate-900 bg-white p-8 text-slate-900 print:border-black print:p-0">
         <header className="mb-4 border-b-2 border-slate-900 pb-3 text-center">
-          <p className="text-xs font-semibold uppercase tracking-wide">
-            Service de Santé des Armées
-          </p>
-          <h1 className="mt-1 text-lg font-bold uppercase">
-            Certificat de suivi des aptitudes
-          </h1>
+          <p className="text-xs font-semibold uppercase tracking-wide">Service de Santé des Armées</p>
+          <h1 className="mt-1 text-lg font-bold uppercase">{TITRES[type]}</h1>
         </header>
 
         {/* En-tête patient */}
@@ -274,7 +266,7 @@ export default function CertificatSuiviAptitudes({
         <section className="mb-4 print:break-inside-avoid">
           <h2 className="mb-1 text-sm font-bold uppercase">Conclusion</h2>
           <div className="border border-slate-900 p-3 text-sm">
-            {CONCLUSIONS.map((valeur) => (
+            {conclusions.map((valeur) => (
               <label key={valeur} className="mb-1 flex items-center gap-2 last:mb-0">
                 <input
                   type="radio"
@@ -283,9 +275,7 @@ export default function CertificatSuiviAptitudes({
                   disabled={!editable}
                   onChange={() => editable && update("conclusion", valeur)}
                 />
-                <span className={local.conclusion === valeur ? "font-semibold" : ""}>
-                  {CONCLUSION_SUIVI_LABELS[valeur]}
-                </span>
+                <span className={local.conclusion === valeur ? "font-semibold" : ""}>{labels[valeur]}</span>
               </label>
             ))}
           </div>

@@ -1,13 +1,36 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
+import {
+  Activity,
+  ClipboardList,
+  FileCheck2,
+  FilePlus2,
+  Pencil,
+  Pill,
+  ShieldAlert,
+  Stethoscope,
+} from "lucide-react";
 import { authOptions } from "@/lib/auth";
-import { isCommandement, peutSignerCertificatAptitude } from "@/lib/auth-guards";
+import { isCommandement, peutEcrireDossierMedical, peutPrescrire, peutSignerCertificatAptitude } from "@/lib/auth-guards";
 import { obtenirDossierCompletPatient, obtenirSyntheseCommandementPatient } from "@/lib/patients";
 import { CONCLUSION_ENGAGEMENT_LABELS, CONCLUSION_SUIVI_LABELS } from "@/lib/sigycop";
+import { calculerAge, formatDateFr, formatDateHeureFr, initiales } from "@/lib/format";
+import { bouton } from "@/lib/ui";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { Badge, badgeCouleurStatutAptitude, badgeCouleurStatutVisite } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Tabs } from "@/components/ui/Tabs";
 
-export default async function PatientPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PatientPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ onglet?: string }>;
+}) {
   const { id } = await params;
+  const { onglet } = await searchParams;
   const session = await getServerSession(authOptions);
   const role = session!.user.role;
 
@@ -16,34 +39,60 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
     if (!synthese) notFound();
 
     return (
-      <div className="max-w-lg space-y-4">
-        <h1 className="text-xl font-bold">
-          {synthese.grade} {synthese.nom} {synthese.prenom}
-        </h1>
-        <p className="text-sm text-slate-500">{synthese.unite}</p>
+      <div className="max-w-xl">
+        <div className="mb-6 flex items-center gap-4">
+          <span className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 text-lg font-semibold text-emerald-800">
+            {initiales(synthese.nom, synthese.prenom)}
+          </span>
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">
+              {synthese.grade} {synthese.nom} {synthese.prenom}
+            </h1>
+            <p className="text-sm text-slate-500">{synthese.unite}</p>
+          </div>
+        </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">Statut de visite</p>
-          <p className="text-lg font-semibold">{synthese.statutVisite}</p>
+        <div className="grid grid-cols-2 gap-4">
+          <Card>
+            <CardBody>
+              <p className="text-sm text-slate-500">Statut de visite</p>
+              <div className="mt-2">
+                <Badge couleur={badgeCouleurStatutVisite(synthese.statutVisite)}>{synthese.statutVisite}</Badge>
+              </div>
+            </CardBody>
+          </Card>
+          <Card>
+            <CardBody>
+              <p className="text-sm text-slate-500">Statut d&apos;aptitude</p>
+              <div className="mt-2">
+                <Badge couleur={badgeCouleurStatutAptitude(synthese.statutAptitude)}>{synthese.statutAptitude}</Badge>
+              </div>
+            </CardBody>
+          </Card>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">Statut d&apos;aptitude globale</p>
-          <p className="text-lg font-semibold">{synthese.statutAptitude}</p>
+
+        <Card className="mt-4">
+          <CardHeader title="Arrêts / exemptions transmis" />
+          <CardBody>
+            {synthese.arrets.length === 0 ? (
+              <p className="text-sm text-slate-400">Aucun</p>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {synthese.arrets.map((a, idx) => (
+                  <li key={idx} className="flex items-center justify-between">
+                    <span>{a.typeExemption.replaceAll("_", " ")}</span>
+                    <span className="text-slate-500">du {a.dateDebut} au {a.dateFin}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
+
+        <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <ShieldAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <p>Secret médical strict : aucun diagnostic, constante ou ordonnance n&apos;est accessible à ce niveau.</p>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <p className="mb-2 text-sm text-slate-500">Arrêts / exemptions transmis</p>
-          {synthese.arrets.length === 0 && <p className="text-sm text-slate-400">Aucun</p>}
-          <ul className="space-y-1 text-sm">
-            {synthese.arrets.map((a, idx) => (
-              <li key={idx}>
-                {a.typeExemption.replaceAll("_", " ")} — du {a.dateDebut} au {a.dateFin}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <p className="text-xs italic text-slate-400">
-          Secret médical strict : aucun diagnostic, constante ou ordonnance n&apos;est accessible à ce niveau.
-        </p>
       </div>
     );
   }
@@ -51,100 +100,267 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
   const patient = await obtenirDossierCompletPatient(id);
   if (!patient) notFound();
 
+  const peutEditer = peutEcrireDossierMedical(role);
+  const peutCertifier = peutSignerCertificatAptitude(role);
+  const peutOrdonner = peutPrescrire(role);
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-xl font-bold">
-            {patient.grade} {patient.nom} {patient.prenom}
-          </h1>
-          <p className="text-sm text-slate-500">
-            {patient.unite} — {patient.specialite || "Sans spécialité"} — RIO {patient.rio}
-          </p>
+    <div>
+      {/* En-tête du dossier */}
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4 print:hidden">
+        <div className="flex items-center gap-4">
+          <span className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 text-lg font-semibold text-emerald-800">
+            {initiales(patient.nom, patient.prenom)}
+          </span>
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">
+              {patient.grade} {patient.nom} {patient.prenom}
+            </h1>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
+              <span>{patient.unite}</span>
+              <span>·</span>
+              <span>{patient.specialite || "Sans spécialité"}</span>
+              <span>·</span>
+              <span>{calculerAge(patient.ddn)} ans</span>
+              <span>·</span>
+              <span>RIO {patient.rio}</span>
+            </div>
+          </div>
         </div>
-        {peutSignerCertificatAptitude(role) && (
-          <Link
-            href={`/dashboard/patients/${patient.id}/certificats/nouveau`}
-            className="rounded-md bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800"
-          >
-            + Nouveau certificat de suivi
+        {peutEditer && (
+          <Link href={`/dashboard/patients/${patient.id}/modifier`} className={bouton("secondaire")}>
+            <Pencil className="h-4 w-4" />
+            Modifier
           </Link>
         )}
       </div>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="mb-2 font-semibold">Historique SIGYCOP</h2>
-        {patient.profilsSigycop.length === 0 && (
-          <p className="text-sm text-slate-400">Aucune évaluation enregistrée.</p>
-        )}
-        <table className="w-full text-left text-sm">
-          <thead className="text-slate-500">
-            <tr>
-              <th className="pr-2">Date</th>
-              <th>S</th><th>I</th><th>G</th><th>Y</th><th>C</th><th>O</th><th>P</th>
-            </tr>
-          </thead>
-          <tbody>
-            {patient.profilsSigycop.map((p) => (
-              <tr key={p.id} className="border-t border-slate-100">
-                <td className="pr-2 py-1">{new Date(p.dateEvaluation).toLocaleDateString("fr-FR")}</td>
-                <td>{p.s}</td><td>{p.i}</td><td>{p.g}</td><td>{p.y}</td><td>{p.c}</td><td>{p.o}</td><td>{p.p}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      <Tabs
+        defaultTab={onglet === "suivi" ? "suivi" : "aptitudes"}
+        tabs={[
+          {
+            key: "aptitudes",
+            label: "Aptitudes",
+            icon: <FileCheck2 className="h-4 w-4" />,
+            content: (
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader title="Historique SIGYCOP" icon={<Activity className="h-4 w-4" />} />
+                  <CardBody>
+                    {patient.profilsSigycop.length === 0 ? (
+                      <EmptyState title="Aucune évaluation SIGYCOP enregistrée" />
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                          <thead className="text-xs uppercase tracking-wide text-slate-400">
+                            <tr>
+                              <th className="pb-2 pr-4 font-medium">Date</th>
+                              {["S", "I", "G", "Y", "C", "O", "P"].map((l) => (
+                                <th key={l} className="pb-2 pr-4 font-medium">{l}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {patient.profilsSigycop.map((p) => (
+                              <tr key={p.id}>
+                                <td className="py-2 pr-4 text-slate-600">{formatDateFr(p.dateEvaluation)}</td>
+                                <td className="py-2 pr-4">{p.s}</td>
+                                <td className="py-2 pr-4">{p.i}</td>
+                                <td className="py-2 pr-4">{p.g}</td>
+                                <td className="py-2 pr-4">{p.y}</td>
+                                <td className="py-2 pr-4">{p.c}</td>
+                                <td className="py-2 pr-4">{p.o}</td>
+                                <td className="py-2 pr-4">{p.p}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </CardBody>
+                </Card>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="mb-2 font-semibold">Certificats de suivi des aptitudes</h2>
-        <ListeCertificats
-          certificats={patient.certificatsSuivi}
-          type="SUIVI"
-          labels={CONCLUSION_SUIVI_LABELS}
-        />
-      </section>
+                <Card>
+                  <CardHeader
+                    title="Certificats de suivi des aptitudes"
+                    icon={<FileCheck2 className="h-4 w-4" />}
+                    action={
+                      peutCertifier && (
+                        <Link
+                          href={`/dashboard/patients/${patient.id}/certificats/nouveau?type=SUIVI`}
+                          className={bouton("secondaire", "sm")}
+                        >
+                          <FilePlus2 className="h-4 w-4" />
+                          Nouveau
+                        </Link>
+                      )
+                    }
+                  />
+                  <CardBody>
+                    <ListeCertificats
+                      certificats={patient.certificatsSuivi}
+                      type="SUIVI"
+                      labels={CONCLUSION_SUIVI_LABELS}
+                    />
+                  </CardBody>
+                </Card>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="mb-2 font-semibold">Certificats d&apos;engagement</h2>
-        <ListeCertificats
-          certificats={patient.certificatsEngagement}
-          type="ENGAGEMENT"
-          labels={CONCLUSION_ENGAGEMENT_LABELS}
-        />
-      </section>
+                <Card>
+                  <CardHeader
+                    title="Certificats d'engagement"
+                    icon={<FileCheck2 className="h-4 w-4" />}
+                    action={
+                      peutCertifier && (
+                        <Link
+                          href={`/dashboard/patients/${patient.id}/certificats/nouveau?type=ENGAGEMENT`}
+                          className={bouton("secondaire", "sm")}
+                        >
+                          <FilePlus2 className="h-4 w-4" />
+                          Nouveau
+                        </Link>
+                      )
+                    }
+                  />
+                  <CardBody>
+                    <ListeCertificats
+                      certificats={patient.certificatsEngagement}
+                      type="ENGAGEMENT"
+                      labels={CONCLUSION_ENGAGEMENT_LABELS}
+                    />
+                  </CardBody>
+                </Card>
+              </div>
+            ),
+          },
+          {
+            key: "suivi",
+            label: "Suivi médical",
+            icon: <Stethoscope className="h-4 w-4" />,
+            content: (
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader
+                    title="Consultations"
+                    icon={<Stethoscope className="h-4 w-4" />}
+                    action={
+                      peutEditer && (
+                        <Link
+                          href={`/dashboard/patients/${patient.id}/consultations/nouveau`}
+                          className={bouton("secondaire", "sm")}
+                        >
+                          <FilePlus2 className="h-4 w-4" />
+                          Nouvelle
+                        </Link>
+                      )
+                    }
+                  />
+                  <CardBody>
+                    {patient.consultations.length === 0 ? (
+                      <EmptyState title="Aucune consultation enregistrée" />
+                    ) : (
+                      <ul className="divide-y divide-slate-100">
+                        {patient.consultations.map((c) => (
+                          <li key={c.id} className="py-3 first:pt-0 last:pb-0">
+                            <div className="flex items-center justify-between">
+                              <p className="font-medium text-slate-900">{c.motif}</p>
+                              <span className="text-xs text-slate-400">{formatDateHeureFr(c.dateConsultation)}</span>
+                            </div>
+                            <p className="mt-0.5 text-sm text-slate-500">
+                              {c.medecin.grade} {c.medecin.prenom} {c.medecin.nom}
+                            </p>
+                            {(c.tensionSystolique || c.frequenceCardiaque || c.temperature) && (
+                              <p className="mt-1 text-xs text-slate-400">
+                                {c.temperature && `${c.temperature}°C · `}
+                                {c.tensionSystolique && c.tensionDiastolique && `TA ${c.tensionSystolique}/${c.tensionDiastolique} · `}
+                                {c.frequenceCardiaque && `FC ${c.frequenceCardiaque} bpm`}
+                              </p>
+                            )}
+                            {c.diagnostic && <p className="mt-1 text-sm text-slate-700">{c.diagnostic}</p>}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </CardBody>
+                </Card>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="mb-2 font-semibold">Arrêts de travail / exemptions</h2>
-        {patient.arretsTravail.length === 0 && <p className="text-sm text-slate-400">Aucun</p>}
-        <ul className="space-y-1 text-sm">
-          {patient.arretsTravail.map((a) => (
-            <li key={a.id}>
-              {a.typeExemption.replaceAll("_", " ")} — du{" "}
-              {new Date(a.dateDebut).toLocaleDateString("fr-FR")} au{" "}
-              {new Date(a.dateFin).toLocaleDateString("fr-FR")}
-              {a.transmisCommandement && (
-                <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs">
-                  Transmis au commandement
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      </section>
+                <Card>
+                  <CardHeader
+                    title="Ordonnances"
+                    icon={<Pill className="h-4 w-4" />}
+                    action={
+                      peutOrdonner && (
+                        <Link
+                          href={`/dashboard/patients/${patient.id}/ordonnances/nouveau`}
+                          className={bouton("secondaire", "sm")}
+                        >
+                          <FilePlus2 className="h-4 w-4" />
+                          Nouvelle
+                        </Link>
+                      )
+                    }
+                  />
+                  <CardBody>
+                    {patient.prescriptions.length === 0 ? (
+                      <EmptyState title="Aucune ordonnance enregistrée" />
+                    ) : (
+                      <ul className="divide-y divide-slate-100">
+                        {patient.prescriptions.map((p) => {
+                          const lignes = Array.isArray(p.medicaments)
+                            ? (p.medicaments as { nom: string }[])
+                            : [];
+                          return (
+                            <li key={p.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                              <div>
+                                <p className="font-medium text-slate-900">
+                                  {lignes.map((m) => m.nom).join(", ") || "Ordonnance"}
+                                </p>
+                                <p className="text-sm text-slate-500">
+                                  {formatDateFr(p.datePrescription)} — {p.medecin.grade} {p.medecin.prenom} {p.medecin.nom}
+                                </p>
+                              </div>
+                              {p.pdfGenereLe && (
+                                <a
+                                  href={`/api/prescriptions/${p.id}/pdf`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className={bouton("secondaire", "sm")}
+                                >
+                                  Voir le PDF
+                                </a>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </CardBody>
+                </Card>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="mb-2 font-semibold">Prescriptions</h2>
-        {patient.prescriptions.length === 0 && <p className="text-sm text-slate-400">Aucune</p>}
-        <ul className="space-y-2 text-sm">
-          {patient.prescriptions.map((p) => (
-            <li key={p.id} className="border-t border-slate-100 pt-2 first:border-0 first:pt-0">
-              <p className="font-medium">{new Date(p.datePrescription).toLocaleDateString("fr-FR")}</p>
-              <p>{p.posologie} — {p.duree}</p>
-              {p.instructions && <p className="text-slate-500">{p.instructions}</p>}
-            </li>
-          ))}
-        </ul>
-      </section>
+                <Card>
+                  <CardHeader title="Arrêts de travail / exemptions" icon={<ClipboardList className="h-4 w-4" />} />
+                  <CardBody>
+                    {patient.arretsTravail.length === 0 ? (
+                      <EmptyState title="Aucun arrêt enregistré" />
+                    ) : (
+                      <ul className="space-y-2 text-sm">
+                        {patient.arretsTravail.map((a) => (
+                          <li key={a.id} className="flex items-center justify-between">
+                            <span>{a.typeExemption.replaceAll("_", " ")}</span>
+                            <span className="text-slate-500">
+                              du {formatDateFr(a.dateDebut)} au {formatDateFr(a.dateFin)}
+                            </span>
+                            {a.transmisCommandement && <Badge couleur="slate">Transmis au commandement</Badge>}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </CardBody>
+                </Card>
+              </div>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -166,18 +382,17 @@ function ListeCertificats({
   labels: Record<string, string>;
 }) {
   if (certificats.length === 0) {
-    return <p className="text-sm text-slate-400">Aucun certificat</p>;
+    return <EmptyState title="Aucun certificat" />;
   }
 
   return (
-    <ul className="space-y-2 text-sm">
+    <ul className="divide-y divide-slate-100">
       {certificats.map((c) => (
-        <li key={c.id} className="flex items-center justify-between border-t border-slate-100 pt-2 first:border-0 first:pt-0">
+        <li key={c.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
           <div>
-            <p className="font-medium">{labels[c.conclusion] ?? c.conclusion}</p>
-            <p className="text-slate-500">
-              {new Date(c.dateCertificat).toLocaleDateString("fr-FR")} à {c.lieu} — {c.medecin.grade}{" "}
-              {c.medecin.prenom} {c.medecin.nom}
+            <p className="font-medium text-slate-900">{labels[c.conclusion] ?? c.conclusion}</p>
+            <p className="text-sm text-slate-500">
+              {formatDateFr(c.dateCertificat)} à {c.lieu} — {c.medecin.grade} {c.medecin.prenom} {c.medecin.nom}
             </p>
           </div>
           {c.pdfGenereLe && (
@@ -185,7 +400,7 @@ function ListeCertificats({
               href={`/api/certificats/${c.id}/pdf?type=${type}`}
               target="_blank"
               rel="noreferrer"
-              className="rounded-md border border-slate-300 px-3 py-1 text-emerald-700 hover:bg-slate-50"
+              className={bouton("secondaire", "sm")}
             >
               Voir le PDF
             </a>

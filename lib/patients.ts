@@ -149,7 +149,21 @@ export async function obtenirDossierCompletPatient(patientId: string) {
         },
       },
       arretsTravail: { orderBy: { dateDebut: "desc" } },
-      prescriptions: { orderBy: { datePrescription: "desc" } },
+      consultations: {
+        orderBy: { dateConsultation: "desc" },
+        include: { medecin: { select: { nom: true, prenom: true, grade: true } } },
+      },
+      prescriptions: {
+        orderBy: { datePrescription: "desc" },
+        select: {
+          id: true,
+          medicaments: true,
+          instructions: true,
+          datePrescription: true,
+          pdfGenereLe: true,
+          medecin: { select: { nom: true, prenom: true, grade: true } },
+        },
+      },
     },
   });
 }
