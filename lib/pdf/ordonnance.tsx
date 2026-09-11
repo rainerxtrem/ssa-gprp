@@ -1,3 +1,4 @@
+import React from "react";
 import { Document, Page, Text, View, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
 
 export interface LigneMedicament {
