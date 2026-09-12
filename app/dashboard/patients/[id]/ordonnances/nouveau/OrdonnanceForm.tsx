@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Field, FieldTextarea } from "@/components/ui/Field";
 import { bouton, champClasses, labelClasses } from "@/lib/ui";
 import { BIBLIOTHEQUE_MEDICAMENTS, analyserLigneMedicament } from "@/lib/medicaments";
+import { detecterInteractions } from "@/lib/interactions";
 
-interface LigneMedicament {
+export interface LigneMedicament {
   nom: string;
   dosage: string;
   forme: string;
@@ -18,11 +19,36 @@ interface LigneMedicament {
 
 const LIGNE_VIDE: LigneMedicament = { nom: "", dosage: "", forme: "", posologie: "", duree: "" };
 
-export default function OrdonnanceForm({ patientId }: { patientId: string }) {
+export interface OrdonnanceValeurs {
+  medicaments: LigneMedicament[];
+  instructions: string;
+  lieu: string;
+}
+
+export default function OrdonnanceForm({
+  patientId,
+  mode = "creer",
+  prescriptionId,
+  valeursInitiales,
+}: {
+  patientId: string;
+  mode?: "creer" | "modifier";
+  prescriptionId?: string;
+  valeursInitiales?: OrdonnanceValeurs;
+}) {
   const router = useRouter();
-  const [medicaments, setMedicaments] = useState<LigneMedicament[]>([{ ...LIGNE_VIDE }]);
+  const [medicaments, setMedicaments] = useState<LigneMedicament[]>(
+    valeursInitiales?.medicaments && valeursInitiales.medicaments.length > 0
+      ? valeursInitiales.medicaments
+      : [{ ...LIGNE_VIDE }]
+  );
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
+
+  const alertesInteraction = useMemo(
+    () => detecterInteractions(medicaments.map((m) => m.nom.trim()).filter(Boolean)),
+    [medicaments]
+  );
 
   function majLigne(index: number, champ: keyof LigneMedicament, valeur: string) {
     setMedicaments((lignes) => lignes.map((l, i) => (i === index ? { ...l, [champ]: valeur } : l)));
@@ -64,11 +90,14 @@ export default function OrdonnanceForm({ patientId }: { patientId: string }) {
     setEnCours(true);
     const form = new FormData(e.currentTarget);
 
-    const reponse = await fetch("/api/prescriptions", {
-      method: "POST",
+    const url = mode === "creer" ? "/api/prescriptions" : `/api/prescriptions/${prescriptionId}`;
+    const method = mode === "creer" ? "POST" : "PATCH";
+
+    const reponse = await fetch(url, {
+      method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        patientId,
+        ...(mode === "creer" ? { patientId } : {}),
         medicaments: lignesValides,
         instructions: form.get("instructions") || undefined,
         lieu: form.get("lieu"),
@@ -83,12 +112,37 @@ export default function OrdonnanceForm({ patientId }: { patientId: string }) {
       return;
     }
 
-    router.push(`/dashboard/patients/${patientId}?onglet=suivi`);
+    if (mode === "creer") {
+      router.push(`/dashboard/patients/${patientId}?onglet=suivi`);
+    } else {
+      router.push(`/dashboard/patients/${patientId}/ordonnances/${prescriptionId}`);
+    }
     router.refresh();
   }
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      {alertesInteraction.length > 0 && (
+        <div className="space-y-2">
+          {alertesInteraction.map((a, idx) => (
+            <div
+              key={idx}
+              className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
+                a.niveau === "danger"
+                  ? "border-red-200 bg-red-50 text-red-800"
+                  : "border-amber-200 bg-amber-50 text-amber-800"
+              }`}
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+              <p>
+                <span className="font-medium">{a.medicaments[0]} + {a.medicaments[1]} : </span>
+                {a.message}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <Card>
         <CardHeader
           title="Médicaments"
@@ -192,8 +246,8 @@ export default function OrdonnanceForm({ patientId }: { patientId: string }) {
       <Card>
         <CardHeader title="Signature" />
         <CardBody className="space-y-4">
-          <FieldTextarea label="Instructions complémentaires" name="instructions" rows={2} />
-          <Field label="Fait à" name="lieu" required className="max-w-xs" />
+          <FieldTextarea label="Instructions complémentaires" name="instructions" rows={2} defaultValue={valeursInitiales?.instructions} />
+          <Field label="Fait à" name="lieu" required className="max-w-xs" defaultValue={valeursInitiales?.lieu} />
         </CardBody>
       </Card>
 
@@ -201,7 +255,7 @@ export default function OrdonnanceForm({ patientId }: { patientId: string }) {
 
       <div className="flex justify-end">
         <button type="submit" disabled={enCours} className={bouton("primaire")}>
-          {enCours ? "Génération..." : "Générer l'ordonnance"}
+          {enCours ? "Génération..." : mode === "creer" ? "Générer l'ordonnance" : "Enregistrer les modifications"}
         </button>
       </div>
     </form>

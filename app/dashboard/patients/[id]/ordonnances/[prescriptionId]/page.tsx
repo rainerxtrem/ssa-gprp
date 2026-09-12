@@ -1,13 +1,16 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
-import { Pill } from "lucide-react";
+import { Pencil, Pill, RefreshCcw } from "lucide-react";
 import { authOptions } from "@/lib/auth";
-import { peutLireDossierMedical } from "@/lib/auth-guards";
+import { peutLireDossierMedical, peutPrescrire } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
 import { formatDateFr } from "@/lib/format";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { PrintButton } from "@/components/ui/PrintButton";
+import { AnnulerAction } from "@/components/ui/AnnulerAction";
+import { Badge } from "@/components/ui/Badge";
 import { bouton } from "@/lib/ui";
 
 export default async function OrdonnanceDetailPage({
@@ -26,6 +29,8 @@ export default async function OrdonnanceDetailPage({
   });
   if (!prescription || prescription.patientId !== id) notFound();
 
+  const peutEditer = peutPrescrire(role) && !prescription.annuleLe;
+
   const lignes = Array.isArray(prescription.medicaments)
     ? (prescription.medicaments as { nom: string; dosage?: string; forme?: string; posologie: string; duree: string }[])
     : [];
@@ -39,6 +44,21 @@ export default async function OrdonnanceDetailPage({
         backLabel="Retour au dossier"
         action={
           <>
+            {peutPrescrire(role) && (
+              <Link
+                href={`/dashboard/patients/${id}/ordonnances/nouveau?dupliquer=${prescription.id}`}
+                className={bouton("secondaire")}
+              >
+                <RefreshCcw className="h-4 w-4" />
+                Renouveler
+              </Link>
+            )}
+            {peutEditer && (
+              <Link href={`/dashboard/patients/${id}/ordonnances/${prescription.id}/modifier`} className={bouton("secondaire")}>
+                <Pencil className="h-4 w-4" />
+                Modifier
+              </Link>
+            )}
             {prescription.pdfGenereLe && (
               <a
                 href={`/api/prescriptions/${prescription.id}/pdf`}
@@ -54,11 +74,21 @@ export default async function OrdonnanceDetailPage({
         }
       />
 
-      <div className="mb-4 text-sm text-slate-500">
-        {prescription.patient.grade} {prescription.patient.nom} {prescription.patient.prenom} — prescrit par{" "}
-        {prescription.medecin.grade} {prescription.medecin.prenom} {prescription.medecin.nom}
-        {prescription.lieu && ` à ${prescription.lieu}`}
+      <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+        <span>
+          {prescription.patient.grade} {prescription.patient.nom} {prescription.patient.prenom} — prescrit par{" "}
+          {prescription.medecin.grade} {prescription.medecin.prenom} {prescription.medecin.nom}
+          {prescription.lieu && ` à ${prescription.lieu}`}
+        </span>
+        {prescription.annuleLe && <Badge couleur="red">Annulée</Badge>}
       </div>
+
+      {prescription.annuleLe && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 print:hidden">
+          <p className="font-medium">Ordonnance annulée</p>
+          {prescription.annuleMotif && <p className="mt-0.5">{prescription.annuleMotif}</p>}
+        </div>
+      )}
 
       <Card>
         <CardHeader title="Médicaments" icon={<Pill className="h-4 w-4" />} />
@@ -86,6 +116,12 @@ export default async function OrdonnanceDetailPage({
             <p className="whitespace-pre-wrap text-sm text-slate-700">{prescription.instructions}</p>
           </CardBody>
         </Card>
+      )}
+
+      {peutEditer && (
+        <div className="mt-4 print:hidden">
+          <AnnulerAction endpoint={`/api/prescriptions/${prescription.id}/annuler`} confirmationLabel="Annuler cette ordonnance" />
+        </div>
       )}
     </div>
   );

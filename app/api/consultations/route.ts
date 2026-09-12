@@ -8,22 +8,11 @@ import {
   peutEcrireDossierMedical,
   peutLireDossierMedical,
 } from "@/lib/auth-guards";
+import { enregistrerAudit } from "@/lib/audit";
+import { champsConsultationSchema } from "@/lib/validation/consultation";
 
-const createConsultationSchema = z.object({
+const createConsultationSchema = champsConsultationSchema.extend({
   patientId: z.string().min(1),
-  motif: z.string().min(1, "Le motif de consultation est requis."),
-  anamnese: z.string().max(4000).optional(),
-  examenClinique: z.string().max(4000).optional(),
-  temperature: z.coerce.number().min(30).max(45).optional(),
-  tensionSystolique: z.coerce.number().int().min(50).max(260).optional(),
-  tensionDiastolique: z.coerce.number().int().min(30).max(160).optional(),
-  frequenceCardiaque: z.coerce.number().int().min(20).max(250).optional(),
-  saturationO2: z.coerce.number().int().min(50).max(100).optional(),
-  poids: z.coerce.number().min(1).max(400).optional(),
-  taille: z.coerce.number().min(30).max(250).optional(),
-  diagnostic: z.string().max(4000).optional(),
-  conduiteATenir: z.string().max(4000).optional(),
-  dateConsultation: z.coerce.date().optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -55,6 +44,13 @@ export async function POST(request: NextRequest) {
         dateConsultation: donnees.dateConsultation ?? new Date(),
         medecinId: utilisateur.id,
       },
+    });
+
+    await enregistrerAudit({
+      patientId: patient.id,
+      utilisateurId: utilisateur.id,
+      action: "CONSULTATION_CREEE",
+      details: consultation.motif,
     });
 
     return NextResponse.json({ consultation }, { status: 201 });

@@ -2,11 +2,11 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Search, Users } from "lucide-react";
 import { Badge, badgeCouleurStatutAptitude, badgeCouleurStatutVisite } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { initiales } from "@/lib/format";
-import { Users } from "lucide-react";
+import { champClasses } from "@/lib/ui";
 
 interface LignePatientComplet {
   id: string;
@@ -27,20 +27,37 @@ interface LigneSyntheseCommandement {
   statutAptitude: string;
 }
 
+const TOUS = "__tous__";
+
+function valeursDistinctes<T>(items: T[], selecteur: (item: T) => string): string[] {
+  return Array.from(new Set(items.map(selecteur))).sort((a, b) => a.localeCompare(b, "fr"));
+}
+
 export function PatientsTableComplete({ patients }: { patients: LignePatientComplet[] }) {
   const [recherche, setRecherche] = useState("");
+  const [unite, setUnite] = useState(TOUS);
+  const [grade, setGrade] = useState(TOUS);
+
+  const unites = useMemo(() => valeursDistinctes(patients, (p) => p.unite), [patients]);
+  const grades = useMemo(() => valeursDistinctes(patients, (p) => p.grade), [patients]);
 
   const filtres = useMemo(() => {
     const q = recherche.trim().toLowerCase();
-    if (!q) return patients;
-    return patients.filter((p) =>
-      [p.nom, p.prenom, p.grade, p.unite, p.rio].some((v) => v.toLowerCase().includes(q))
-    );
-  }, [patients, recherche]);
+    return patients.filter((p) => {
+      if (unite !== TOUS && p.unite !== unite) return false;
+      if (grade !== TOUS && p.grade !== grade) return false;
+      if (!q) return true;
+      return [p.nom, p.prenom, p.grade, p.unite, p.rio].some((v) => v.toLowerCase().includes(q));
+    });
+  }, [patients, recherche, unite, grade]);
 
   return (
     <div>
-      <BarreRecherche recherche={recherche} onChange={setRecherche} />
+      <BarreFiltres recherche={recherche} onRechercheChange={setRecherche}>
+        <FiltreSelect label="Toutes les unités" valeur={unite} options={unites} onChange={setUnite} />
+        <FiltreSelect label="Tous les grades" valeur={grade} options={grades} onChange={setGrade} />
+      </BarreFiltres>
+
       {filtres.length === 0 ? (
         <EmptyState
           icon={<Users className="h-8 w-8" />}
@@ -48,7 +65,7 @@ export function PatientsTableComplete({ patients }: { patients: LignePatientComp
           description={
             patients.length === 0
               ? "Ajoutez un premier patient pour commencer le suivi."
-              : "Essayez un autre nom, grade ou identifiant."
+              : "Essayez un autre nom, grade, unité ou identifiant."
           }
         />
       ) : (
@@ -99,16 +116,37 @@ export function PatientsTableComplete({ patients }: { patients: LignePatientComp
 
 export function PatientsTableCommandement({ syntheses }: { syntheses: LigneSyntheseCommandement[] }) {
   const [recherche, setRecherche] = useState("");
+  const [unite, setUnite] = useState(TOUS);
+  const [grade, setGrade] = useState(TOUS);
+  const [statutAptitude, setStatutAptitude] = useState(TOUS);
+  const [statutVisite, setStatutVisite] = useState(TOUS);
+
+  const unites = useMemo(() => valeursDistinctes(syntheses, (p) => p.unite), [syntheses]);
+  const grades = useMemo(() => valeursDistinctes(syntheses, (p) => p.grade), [syntheses]);
+  const aptitudes = useMemo(() => valeursDistinctes(syntheses, (p) => p.statutAptitude), [syntheses]);
+  const visites = useMemo(() => valeursDistinctes(syntheses, (p) => p.statutVisite), [syntheses]);
 
   const filtres = useMemo(() => {
     const q = recherche.trim().toLowerCase();
-    if (!q) return syntheses;
-    return syntheses.filter((p) => [p.nom, p.prenom, p.grade, p.unite].some((v) => v.toLowerCase().includes(q)));
-  }, [syntheses, recherche]);
+    return syntheses.filter((p) => {
+      if (unite !== TOUS && p.unite !== unite) return false;
+      if (grade !== TOUS && p.grade !== grade) return false;
+      if (statutAptitude !== TOUS && p.statutAptitude !== statutAptitude) return false;
+      if (statutVisite !== TOUS && p.statutVisite !== statutVisite) return false;
+      if (!q) return true;
+      return [p.nom, p.prenom, p.grade, p.unite].some((v) => v.toLowerCase().includes(q));
+    });
+  }, [syntheses, recherche, unite, grade, statutAptitude, statutVisite]);
 
   return (
     <div>
-      <BarreRecherche recherche={recherche} onChange={setRecherche} />
+      <BarreFiltres recherche={recherche} onRechercheChange={setRecherche}>
+        <FiltreSelect label="Toutes les unités" valeur={unite} options={unites} onChange={setUnite} />
+        <FiltreSelect label="Tous les grades" valeur={grade} options={grades} onChange={setGrade} />
+        <FiltreSelect label="Toute aptitude" valeur={statutAptitude} options={aptitudes} onChange={setStatutAptitude} />
+        <FiltreSelect label="Tout statut visite" valeur={statutVisite} options={visites} onChange={setStatutVisite} />
+      </BarreFiltres>
+
       {filtres.length === 0 ? (
         <EmptyState icon={<Users className="h-8 w-8" />} title="Aucun résultat" />
       ) : (
@@ -154,16 +192,51 @@ export function PatientsTableCommandement({ syntheses }: { syntheses: LigneSynth
   );
 }
 
-function BarreRecherche({ recherche, onChange }: { recherche: string; onChange: (v: string) => void }) {
+function BarreFiltres({
+  recherche,
+  onRechercheChange,
+  children,
+}: {
+  recherche: string;
+  onRechercheChange: (v: string) => void;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="relative mb-4 max-w-sm">
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-      <input
-        value={recherche}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Rechercher un patient..."
-        className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
-      />
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="relative w-full max-w-sm">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <input
+          value={recherche}
+          onChange={(e) => onRechercheChange(e.target.value)}
+          placeholder="Rechercher un patient..."
+          className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+        />
+      </div>
+      {children}
     </div>
+  );
+}
+
+function FiltreSelect({
+  label,
+  valeur,
+  options,
+  onChange,
+}: {
+  label: string;
+  valeur: string;
+  options: string[];
+  onChange: (v: string) => void;
+}) {
+  if (options.length <= 1) return null;
+  return (
+    <select value={valeur} onChange={(e) => onChange(e.target.value)} className={`${champClasses} w-auto`}>
+      <option value={TOUS}>{label}</option>
+      {options.map((o) => (
+        <option key={o} value={o}>
+          {o}
+        </option>
+      ))}
+    </select>
   );
 }

@@ -2,11 +2,12 @@ import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { AlertTriangle, ArrowRight, ShieldAlert, Stethoscope, UserPlus, Users } from "lucide-react";
 import { authOptions } from "@/lib/auth";
-import { isCommandement, isMedecin, isParamedical } from "@/lib/auth-guards";
+import { isCommandement, isMedecin } from "@/lib/auth-guards";
 import { listerPatientsPourRole } from "@/lib/patients";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Card, CardBody } from "@/components/ui/Card";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { bouton } from "@/lib/ui";
+import type { SyntheseCommandement } from "@/lib/auth-guards";
 
 export default async function DashboardHomePage() {
   const session = await getServerSession(authOptions);
@@ -66,6 +67,12 @@ export default async function DashboardHomePage() {
         </Card>
       </div>
 
+      {vue.mode === "commandement" && (
+        <div className="mt-6">
+          <AgregatParUnite syntheses={vue.syntheses} />
+        </div>
+      )}
+
       {isCommandement(role) && (
         <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <ShieldAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
@@ -76,6 +83,57 @@ export default async function DashboardHomePage() {
         </div>
       )}
     </div>
+  );
+}
+
+const STATUTS_APTITUDE = ["Apte", "Apte avec restriction", "Inapte temporaire", "Inapte définitif", "Non évalué"];
+
+function AgregatParUnite({ syntheses }: { syntheses: SyntheseCommandement[] }) {
+  const unites = Array.from(new Set(syntheses.map((s) => s.unite))).sort((a, b) => a.localeCompare(b, "fr"));
+
+  const lignes = unites.map((unite) => {
+    const effectif = syntheses.filter((s) => s.unite === unite);
+    const parAptitude = Object.fromEntries(
+      STATUTS_APTITUDE.map((statut) => [statut, effectif.filter((s) => s.statutAptitude === statut).length])
+    );
+    const enRetard = effectif.filter((s) => s.statutVisite === "En retard").length;
+    return { unite, effectif: effectif.length, parAptitude, enRetard };
+  });
+
+  return (
+    <Card>
+      <CardHeader title="Taux d'aptitude par unité" description="Répartition des effectifs par statut d'aptitude" />
+      <CardBody>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="text-xs uppercase tracking-wide text-slate-400">
+              <tr>
+                <th className="pb-2 pr-4 font-medium">Unité</th>
+                <th className="pb-2 pr-4 font-medium">Effectif</th>
+                {STATUTS_APTITUDE.map((s) => (
+                  <th key={s} className="pb-2 pr-4 font-medium">{s}</th>
+                ))}
+                <th className="pb-2 pr-4 font-medium">Visites en retard</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {lignes.map((l) => (
+                <tr key={l.unite}>
+                  <td className="py-2 pr-4 font-medium text-slate-900">{l.unite}</td>
+                  <td className="py-2 pr-4 text-slate-600">{l.effectif}</td>
+                  {STATUTS_APTITUDE.map((s) => (
+                    <td key={s} className="py-2 pr-4 text-slate-600">{l.parAptitude[s] || 0}</td>
+                  ))}
+                  <td className={`py-2 pr-4 font-medium ${l.enRetard > 0 ? "text-red-600" : "text-slate-600"}`}>
+                    {l.enRetard}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardBody>
+    </Card>
   );
 }
 

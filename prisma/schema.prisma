@@ -60,6 +60,13 @@ enum TypeExemption {
   CONVALESCENCE
 }
 
+enum StatutConvocation {
+  PLANIFIEE
+  HONOREE
+  ANNULEE
+  ABSENT
+}
+
 // ---------------------------------------------------------------------------
 // MODELS
 // ---------------------------------------------------------------------------
@@ -72,6 +79,7 @@ model User {
   passwordHash String
   role         Role
   grade        String
+  actif        Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -81,6 +89,8 @@ model User {
   consultations         Consultation[]             @relation("MedecinConsultations")
   prescriptions         Prescription[]             @relation("MedecinPrescriptions")
   arretsTravail         ArretTravail[]             @relation("MedecinArretsTravail")
+  convocations          Convocation[]              @relation("MedecinConvocations")
+  journalEntries        JournalAudit[]             @relation("AuteurJournal")
 
   @@map("users")
 }
@@ -103,6 +113,8 @@ model Patient {
   consultations         Consultation[]
   prescriptions         Prescription[]
   arretsTravail         ArretTravail[]
+  convocations          Convocation[]
+  journalEntries        JournalAudit[]
 
   @@map("patients")
 }
@@ -173,6 +185,11 @@ model CertificatEngagement {
   pdf          Bytes?
   pdfGenereLe  DateTime?
 
+  // Annulation : le document reste dans le dossier (traçabilité) mais n'est
+  // plus pris en compte dans les statuts (aptitude, etc.).
+  annuleLe    DateTime?
+  annuleMotif String?   @db.Text
+
   medecin          User   @relation("MedecinCertificatsEngagement", fields: [medecinId], references: [id])
   medecinId        String
   medecinSignature String? // dataURL/base64 ou référence vers un fichier de signature
@@ -226,6 +243,11 @@ model CertificatSuiviAptitudes {
   pdf          Bytes?
   pdfGenereLe  DateTime?
 
+  // Annulation : le document reste dans le dossier (traçabilité) mais n'est
+  // plus pris en compte dans les statuts (aptitude, etc.).
+  annuleLe    DateTime?
+  annuleMotif String?   @db.Text
+
   medecin          User   @relation("MedecinCertificatsSuivi", fields: [medecinId], references: [id])
   medecinId        String
   medecinSignature String?
@@ -265,6 +287,9 @@ model Consultation {
   diagnostic      String? @db.Text
   conduiteATenir  String? @db.Text
 
+  annuleLe    DateTime?
+  annuleMotif String?   @db.Text
+
   medecin   User   @relation("MedecinConsultations", fields: [medecinId], references: [id])
   medecinId String
 
@@ -291,6 +316,9 @@ model Prescription {
   pdf         Bytes?
   pdfGenereLe DateTime?
 
+  annuleLe    DateTime?
+  annuleMotif String?   @db.Text
+
   medecin   User   @relation("MedecinPrescriptions", fields: [medecinId], references: [id])
   medecinId String
 
@@ -298,6 +326,7 @@ model Prescription {
   patientId String
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([patientId])
   @@map("prescriptions")
@@ -322,4 +351,44 @@ model ArretTravail {
 
   @@index([patientId])
   @@map("arrets_travail")
+}
+
+/// Convocation à une visite médicale. Alimente le statut de visite exposé
+/// au COMMANDEMENT ("Planifiée le DD/MM/YYYY") sans jamais exposer le motif.
+model Convocation {
+  id               String            @id @default(cuid())
+  dateConvocation  DateTime
+  motif            String?           @db.Text
+  statut           StatutConvocation @default(PLANIFIEE)
+
+  medecin   User   @relation("MedecinConvocations", fields: [medecinId], references: [id])
+  medecinId String
+
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId])
+  @@map("convocations")
+}
+
+/// Journal d'audit du dossier patient : qui a créé/modifié/annulé quoi et quand.
+/// `details` reste un résumé non sensible (jamais de diagnostic/motif en clair).
+model JournalAudit {
+  id      String  @id @default(cuid())
+  action  String
+  details String? @db.Text
+
+  utilisateur   User   @relation("AuteurJournal", fields: [utilisateurId], references: [id])
+  utilisateurId String
+
+  patient   Patient? @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([patientId])
+  @@map("journal_audit")
 }

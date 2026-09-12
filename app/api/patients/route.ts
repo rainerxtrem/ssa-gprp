@@ -7,6 +7,7 @@ import {
   interdireAccesDossierMedicalAuCommandement,
   peutEcrireDossierMedical,
 } from "@/lib/auth-guards";
+import { enregistrerAudit } from "@/lib/audit";
 
 const createPatientSchema = z.object({
   rio: z.string().min(1, "L'identifiant défense (RIO) est requis."),
@@ -45,6 +46,13 @@ export async function POST(request: NextRequest) {
     }
 
     const patient = await prisma.patient.create({ data: donnees });
+
+    await enregistrerAudit({
+      patientId: patient.id,
+      utilisateurId: utilisateur.id,
+      action: "PATIENT_CREE",
+    });
+
     return NextResponse.json({ patient }, { status: 201 });
   } catch (error) {
     if (error instanceof AccesRefuseError) {

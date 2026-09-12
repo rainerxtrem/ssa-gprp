@@ -9,21 +9,11 @@ import {
   peutPrescrire,
 } from "@/lib/auth-guards";
 import { genererOrdonnancePdf } from "@/lib/pdf/ordonnance";
+import { enregistrerAudit } from "@/lib/audit";
+import { champsPrescriptionSchema } from "@/lib/validation/prescription";
 
-const ligneMedicamentSchema = z.object({
-  nom: z.string().min(1, "Le nom du médicament est requis."),
-  dosage: z.string().optional(),
-  forme: z.string().optional(),
-  posologie: z.string().min(1, "La posologie est requise."),
-  duree: z.string().min(1, "La durée est requise."),
-});
-
-const createPrescriptionSchema = z.object({
+const createPrescriptionSchema = champsPrescriptionSchema.extend({
   patientId: z.string().min(1),
-  medicaments: z.array(ligneMedicamentSchema).min(1, "Au moins un médicament est requis."),
-  instructions: z.string().max(2000).optional(),
-  lieu: z.string().min(1, "Le lieu de signature est requis."),
-  datePrescription: z.coerce.date().optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -90,6 +80,13 @@ export async function POST(request: NextRequest) {
       console.error("[POST /api/prescriptions] Génération PDF échouée (ordonnance déjà enregistrée)", erreurPdf);
     }
 
+    await enregistrerAudit({
+      patientId: patient.id,
+      utilisateurId: utilisateur.id,
+      action: "ORDONNANCE_CREEE",
+      details: donnees.medicaments.map((m) => m.nom).join(", "),
+    });
+
     const { pdf: _pdf, ...prescriptionSansPdf } = prescriptionFinale;
     return NextResponse.json({ prescription: prescriptionSansPdf }, { status: 201 });
   } catch (error) {
@@ -134,6 +131,7 @@ export async function GET(request: NextRequest) {
         lieu: true,
         datePrescription: true,
         pdfGenereLe: true,
+        annuleLe: true,
         medecin: { select: { nom: true, prenom: true, grade: true } },
       },
     });

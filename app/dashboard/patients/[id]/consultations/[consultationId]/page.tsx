@@ -1,13 +1,17 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
-import { Activity, Stethoscope } from "lucide-react";
+import { Activity, Pencil, Stethoscope } from "lucide-react";
 import { authOptions } from "@/lib/auth";
-import { peutLireDossierMedical } from "@/lib/auth-guards";
+import { peutEcrireDossierMedical, peutLireDossierMedical } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
 import { formatDateHeureFr } from "@/lib/format";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { PrintButton } from "@/components/ui/PrintButton";
+import { AnnulerAction } from "@/components/ui/AnnulerAction";
+import { Badge } from "@/components/ui/Badge";
+import { bouton } from "@/lib/ui";
 
 export default async function ConsultationDetailPage({
   params,
@@ -26,6 +30,8 @@ export default async function ConsultationDetailPage({
   });
   if (!consultation || consultation.patientId !== id) notFound();
 
+  const peutEditer = peutEcrireDossierMedical(role) && !consultation.annuleLe;
+
   const constantes: { label: string; valeur: string }[] = [];
   if (consultation.temperature) constantes.push({ label: "Température", valeur: `${consultation.temperature} °C` });
   if (consultation.tensionSystolique && consultation.tensionDiastolique)
@@ -42,13 +48,33 @@ export default async function ConsultationDetailPage({
         description={formatDateHeureFr(consultation.dateConsultation)}
         backHref={`/dashboard/patients/${id}?onglet=suivi`}
         backLabel="Retour au dossier"
-        action={<PrintButton />}
+        action={
+          <>
+            {peutEditer && (
+              <Link href={`/dashboard/patients/${id}/consultations/${consultation.id}/modifier`} className={bouton("secondaire")}>
+                <Pencil className="h-4 w-4" />
+                Modifier
+              </Link>
+            )}
+            <PrintButton />
+          </>
+        }
       />
 
-      <div className="mb-4 text-sm text-slate-500">
-        {consultation.patient.grade} {consultation.patient.nom} {consultation.patient.prenom} — reçu(e) par{" "}
-        {consultation.medecin.grade} {consultation.medecin.prenom} {consultation.medecin.nom}
+      <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+        <span>
+          {consultation.patient.grade} {consultation.patient.nom} {consultation.patient.prenom} — reçu(e) par{" "}
+          {consultation.medecin.grade} {consultation.medecin.prenom} {consultation.medecin.nom}
+        </span>
+        {consultation.annuleLe && <Badge couleur="red">Annulée</Badge>}
       </div>
+
+      {consultation.annuleLe && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 print:hidden">
+          <p className="font-medium">Consultation annulée le {formatDateHeureFr(consultation.annuleLe)}</p>
+          {consultation.annuleMotif && <p className="mt-0.5">{consultation.annuleMotif}</p>}
+        </div>
+      )}
 
       <div className="space-y-4">
         <Card>
@@ -109,6 +135,15 @@ export default async function ConsultationDetailPage({
           </Card>
         )}
       </div>
+
+      {peutEditer && (
+        <div className="mt-4 print:hidden">
+          <AnnulerAction
+            endpoint={`/api/consultations/${consultation.id}/annuler`}
+            confirmationLabel="Annuler cette consultation"
+          />
+        </div>
+      )}
     </div>
   );
 }

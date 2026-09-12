@@ -11,10 +11,14 @@ export default function NouveauCertificatClient({
   type,
   patientId,
   donneesInitiales,
+  mode = "creer",
+  certificatId,
 }: {
   type: CertificatType;
   patientId: string;
   donneesInitiales: CertificatAptitudeData;
+  mode?: "creer" | "modifier";
+  certificatId?: string;
 }) {
   const router = useRouter();
   const [erreur, setErreur] = useState<string | null>(null);
@@ -33,30 +37,35 @@ export default function NouveauCertificatClient({
     setErreur(null);
     setEnCours(true);
 
-    const reponse = await fetch("/api/certificats", {
-      method: "POST",
+    const corps = {
+      type,
+      ...(mode === "creer" ? { patientId } : {}),
+      sigycop: { s: data.s, i: data.i, g: data.g, y: data.y, c: data.c, o: data.o, p: data.p },
+      aptitudes: {
+        aptitudeGeneraleSPP: data.aptitudeGeneraleSPP,
+        aptitudeInitialeGES: data.aptitudeInitialeGES,
+        aptitudeMIR: data.aptitudeMIR,
+        aptitudeGRIMP: data.aptitudeGRIMP,
+        aptitudeNRBCe: data.aptitudeNRBCe,
+        aptitudeGHSC: data.aptitudeGHSC,
+        conduiteGroupeLeger: data.conduiteGroupeLeger,
+        conduiteGroupeLourd: data.conduiteGroupeLourd,
+        opex: data.opex,
+        contreIndicationEPMS: data.contreIndicationEPMS,
+      },
+      observations: data.observations || undefined,
+      lieu: data.lieu,
+      conclusion: data.conclusion,
+      dateCertificat: data.dateCertificat,
+    };
+
+    const url = mode === "creer" ? "/api/certificats" : `/api/certificats/${certificatId}`;
+    const method = mode === "creer" ? "POST" : "PATCH";
+
+    const reponse = await fetch(url, {
+      method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type,
-        patientId,
-        sigycop: { s: data.s, i: data.i, g: data.g, y: data.y, c: data.c, o: data.o, p: data.p },
-        aptitudes: {
-          aptitudeGeneraleSPP: data.aptitudeGeneraleSPP,
-          aptitudeInitialeGES: data.aptitudeInitialeGES,
-          aptitudeMIR: data.aptitudeMIR,
-          aptitudeGRIMP: data.aptitudeGRIMP,
-          aptitudeNRBCe: data.aptitudeNRBCe,
-          aptitudeGHSC: data.aptitudeGHSC,
-          conduiteGroupeLeger: data.conduiteGroupeLeger,
-          conduiteGroupeLourd: data.conduiteGroupeLourd,
-          opex: data.opex,
-          contreIndicationEPMS: data.contreIndicationEPMS,
-        },
-        observations: data.observations || undefined,
-        lieu: data.lieu,
-        conclusion: data.conclusion,
-        dateCertificat: data.dateCertificat,
-      }),
+      body: JSON.stringify(corps),
     });
 
     setEnCours(false);
@@ -67,7 +76,11 @@ export default function NouveauCertificatClient({
       return;
     }
 
-    router.push(`/dashboard/patients/${patientId}?onglet=aptitudes`);
+    if (mode === "creer") {
+      router.push(`/dashboard/patients/${patientId}?onglet=aptitudes`);
+    } else {
+      router.push(`/dashboard/patients/${patientId}/certificats/${certificatId}?type=${type}`);
+    }
     router.refresh();
   }
 

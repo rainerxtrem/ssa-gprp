@@ -78,6 +78,11 @@ export function peutTransmettreArretAuCommandement(role: Role): boolean {
   return isMedecin(role);
 }
 
+/** Gestion des comptes utilisateurs (création, rôle, activation) : réservée au médecin-chef. */
+export function peutGererUtilisateurs(role: Role): boolean {
+  return role === Role.MEDECIN_CHEF;
+}
+
 // ---------------------------------------------------------------------------
 // Contrôle d'accès pour les Route Handlers
 // ---------------------------------------------------------------------------

@@ -19,7 +19,7 @@ export const authOptions: NextAuthOptions = {
         const user = await prisma.user.findUnique({
           where: { email: credentials.email.toLowerCase() },
         });
-        if (!user) return null;
+        if (!user || !user.actif) return null;
 
         const motDePasseValide = await compare(credentials.password, user.passwordHash);
         if (!motDePasseValide) return null;

@@ -9,60 +9,8 @@ import {
   peutSignerCertificatAptitude,
 } from "@/lib/auth-guards";
 import { genererCertificatPdf } from "@/lib/pdf/certificat";
-
-// ---------------------------------------------------------------------------
-// Validation des données entrantes
-// ---------------------------------------------------------------------------
-
-const aptitudeStatusSchema = z.enum(["APTE", "APTE_RESTRICTION", "INAPTE", "NON_EVALUE"]);
-
-const aptitudesSchema = z.object({
-  aptitudeGeneraleSPP: aptitudeStatusSchema,
-  aptitudeInitialeGES: aptitudeStatusSchema,
-  aptitudeMIR: aptitudeStatusSchema,
-  aptitudeGRIMP: aptitudeStatusSchema,
-  aptitudeNRBCe: aptitudeStatusSchema,
-  aptitudeGHSC: aptitudeStatusSchema,
-  conduiteGroupeLeger: aptitudeStatusSchema,
-  conduiteGroupeLourd: aptitudeStatusSchema,
-  opex: aptitudeStatusSchema,
-  contreIndicationEPMS: z.boolean().default(false),
-});
-
-const sigycopSchema = z.object({
-  s: z.number().int().min(1).max(6),
-  i: z.number().int().min(1).max(6),
-  g: z.number().int().min(1).max(6),
-  y: z.number().int().min(1).max(6),
-  c: z.number().int().min(1).max(6),
-  o: z.number().int().min(1).max(6),
-  p: z.number().int().min(1).max(6),
-});
-
-const baseCertificatSchema = z.object({
-  patientId: z.string().min(1),
-  sigycop: sigycopSchema,
-  aptitudes: aptitudesSchema,
-  observations: z.string().max(4000).optional(),
-  lieu: z.string().min(1, "Le lieu de signature est requis."),
-  dateCertificat: z.coerce.date().optional(),
-});
-
-const createCertificatSchema = z.discriminatedUnion("type", [
-  baseCertificatSchema.extend({
-    type: z.literal("ENGAGEMENT"),
-    conclusion: z.enum(["APTE_ENGAGEMENT", "INAPTE_TEMPORAIRE", "INAPTE", "AJOURNEMENT"]),
-  }),
-  baseCertificatSchema.extend({
-    type: z.literal("SUIVI"),
-    conclusion: z.enum([
-      "APTE_A_SERVIR",
-      "APTE_A_SERVIR_AVEC_RESTRICTION",
-      "INAPTE_TEMPORAIRE_A_SERVIR",
-      "INAPTE_DEFINITIF_A_SERVIR",
-    ]),
-  }),
-]);
+import { enregistrerAudit } from "@/lib/audit";
+import { creerCertificatSchema } from "@/lib/validation/certificat";
 
 // ---------------------------------------------------------------------------
 // POST /api/certificats
@@ -84,7 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     const json = await request.json();
-    const donnees = createCertificatSchema.parse(json);
+    const donnees = creerCertificatSchema.parse(json);
     const dateCertificat = donnees.dateCertificat ?? new Date();
 
     const [patient, medecin] = await Promise.all([
@@ -172,6 +120,13 @@ export async function POST(request: NextRequest) {
       console.error("[POST /api/certificats] Génération PDF échouée (certificat déjà enregistré)", erreurPdf);
     }
 
+    await enregistrerAudit({
+      patientId: patient.id,
+      utilisateurId: utilisateur.id,
+      action: "CERTIFICAT_CREE",
+      details: `${donnees.type} — ${donnees.conclusion}`,
+    });
+
     const { pdf: _pdf, ...certificatSansPdf } = certificatFinal;
     return NextResponse.json({ certificat: certificatSansPdf }, { status: 201 });
   } catch (error) {
@@ -217,6 +172,7 @@ export async function GET(request: NextRequest) {
       dateCertificat: true,
       lieu: true,
       pdfGenereLe: true,
+      annuleLe: true,
       medecinId: true,
       createdAt: true,
     } as const;

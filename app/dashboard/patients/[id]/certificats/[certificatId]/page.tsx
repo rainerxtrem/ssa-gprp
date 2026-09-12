@@ -1,10 +1,14 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
+import { Pencil } from "lucide-react";
 import { authOptions } from "@/lib/auth";
-import { peutLireDossierMedical } from "@/lib/auth-guards";
+import { peutLireDossierMedical, peutSignerCertificatAptitude } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { bouton } from "@/lib/ui";
+import { AnnulerAction } from "@/components/ui/AnnulerAction";
+import { Badge } from "@/components/ui/Badge";
 import CertificatAptitudeForm, {
   type CertificatAptitudeData,
   type CertificatType,
@@ -37,6 +41,8 @@ export default async function CertificatDetailPage({
         });
 
   if (!certificat || certificat.patientId !== id) notFound();
+
+  const peutEditer = peutSignerCertificatAptitude(role) && !certificat.annuleLe;
 
   const data: CertificatAptitudeData = {
     nom: certificat.nom,
@@ -77,19 +83,45 @@ export default async function CertificatDetailPage({
         backHref={`/dashboard/patients/${id}?onglet=aptitudes`}
         backLabel="Retour au dossier"
         action={
-          certificat.pdfGenereLe && (
-            <a
-              href={`/api/certificats/${certificat.id}/pdf?type=${type}`}
-              target="_blank"
-              rel="noreferrer"
-              className={bouton("secondaire")}
-            >
-              Voir le PDF
-            </a>
-          )
+          <>
+            {peutEditer && (
+              <Link href={`/dashboard/patients/${id}/certificats/${certificat.id}/modifier?type=${type}`} className={bouton("secondaire")}>
+                <Pencil className="h-4 w-4" />
+                Modifier
+              </Link>
+            )}
+            {certificat.pdfGenereLe && (
+              <a
+                href={`/api/certificats/${certificat.id}/pdf?type=${type}`}
+                target="_blank"
+                rel="noreferrer"
+                className={bouton("secondaire")}
+              >
+                Voir le PDF
+              </a>
+            )}
+          </>
         }
       />
+
+      {certificat.annuleLe && (
+        <div className="mb-4 flex items-center gap-2 print:hidden">
+          <Badge couleur="red">Annulé</Badge>
+          {certificat.annuleMotif && <span className="text-sm text-slate-500">{certificat.annuleMotif}</span>}
+        </div>
+      )}
+
       <CertificatAptitudeForm type={type} data={data} editable={false} />
+
+      {peutEditer && (
+        <div className="mx-auto mt-4 max-w-3xl print:hidden">
+          <AnnulerAction
+            endpoint={`/api/certificats/${certificat.id}/annuler`}
+            corpsSupplementaire={{ type }}
+            confirmationLabel="Annuler ce certificat"
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   interdireAccesDossierMedicalAuCommandement,
   peutEcrireDossierMedical,
 } from "@/lib/auth-guards";
+import { enregistrerAudit } from "@/lib/audit";
 
 const updatePatientSchema = z.object({
   rio: z.string().min(1),
@@ -38,6 +39,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const donnees = updatePatientSchema.parse(await request.json());
 
+    const avant = await prisma.patient.findUnique({ where: { id } });
+    if (!avant) return NextResponse.json({ error: "Patient introuvable." }, { status: 404 });
+
     const conflit = await prisma.patient.findFirst({
       where: { rio: donnees.rio, NOT: { id } },
     });
@@ -49,6 +53,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     const patient = await prisma.patient.update({ where: { id }, data: donnees });
+
+    const champsModifies = (Object.keys(donnees) as (keyof typeof donnees)[]).filter(
+      (champ) => String(avant[champ] ?? "") !== String(donnees[champ] ?? "")
+    );
+    if (champsModifies.length > 0) {
+      await enregistrerAudit({
+        patientId: patient.id,
+        utilisateurId: utilisateur.id,
+        action: "PATIENT_MODIFIE",
+        details: `Champs modifiés : ${champsModifies.join(", ")}`,
+      });
+    }
+
     return NextResponse.json({ patient });
   } catch (error) {
     if (error instanceof AccesRefuseError) {

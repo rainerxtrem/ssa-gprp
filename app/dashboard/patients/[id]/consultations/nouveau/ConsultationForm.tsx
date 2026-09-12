@@ -6,7 +6,32 @@ import { Field, FieldTextarea } from "@/components/ui/Field";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { bouton } from "@/lib/ui";
 
-export default function ConsultationForm({ patientId }: { patientId: string }) {
+export interface ConsultationValeurs {
+  motif: string;
+  anamnese: string;
+  examenClinique: string;
+  temperature: string;
+  tensionSystolique: string;
+  tensionDiastolique: string;
+  frequenceCardiaque: string;
+  saturationO2: string;
+  poids: string;
+  taille: string;
+  diagnostic: string;
+  conduiteATenir: string;
+}
+
+export default function ConsultationForm({
+  patientId,
+  mode = "creer",
+  consultationId,
+  valeursInitiales,
+}: {
+  patientId: string;
+  mode?: "creer" | "modifier";
+  consultationId?: string;
+  valeursInitiales?: ConsultationValeurs;
+}) {
   const router = useRouter();
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
@@ -23,7 +48,7 @@ export default function ConsultationForm({ patientId }: { patientId: string }) {
     };
 
     const payload = {
-      patientId,
+      ...(mode === "creer" ? { patientId } : {}),
       motif: form.get("motif"),
       anamnese: form.get("anamnese") || undefined,
       examenClinique: form.get("examenClinique") || undefined,
@@ -38,8 +63,11 @@ export default function ConsultationForm({ patientId }: { patientId: string }) {
       conduiteATenir: form.get("conduiteATenir") || undefined,
     };
 
-    const reponse = await fetch("/api/consultations", {
-      method: "POST",
+    const url = mode === "creer" ? "/api/consultations" : `/api/consultations/${consultationId}`;
+    const method = mode === "creer" ? "POST" : "PATCH";
+
+    const reponse = await fetch(url, {
+      method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
@@ -52,39 +80,45 @@ export default function ConsultationForm({ patientId }: { patientId: string }) {
       return;
     }
 
-    router.push(`/dashboard/patients/${patientId}?onglet=suivi`);
+    if (mode === "creer") {
+      router.push(`/dashboard/patients/${patientId}?onglet=suivi`);
+    } else {
+      router.push(`/dashboard/patients/${patientId}/consultations/${consultationId}`);
+    }
     router.refresh();
   }
+
+  const v = valeursInitiales;
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
       <Card>
         <CardHeader title="Motif et anamnèse" />
         <CardBody className="space-y-4">
-          <Field label="Motif de consultation" name="motif" required />
-          <FieldTextarea label="Anamnèse" name="anamnese" rows={3} />
-          <FieldTextarea label="Examen clinique" name="examenClinique" rows={3} />
+          <Field label="Motif de consultation" name="motif" required defaultValue={v?.motif} />
+          <FieldTextarea label="Anamnèse" name="anamnese" rows={3} defaultValue={v?.anamnese} />
+          <FieldTextarea label="Examen clinique" name="examenClinique" rows={3} defaultValue={v?.examenClinique} />
         </CardBody>
       </Card>
 
       <Card>
         <CardHeader title="Constantes" description="Facultatif — laisser vide si non mesuré" />
         <CardBody className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <Field label="Température (°C)" name="temperature" type="number" />
-          <Field label="Tension systolique" name="tensionSystolique" type="number" />
-          <Field label="Tension diastolique" name="tensionDiastolique" type="number" />
-          <Field label="Fréquence cardiaque" name="frequenceCardiaque" type="number" />
-          <Field label="Saturation O2 (%)" name="saturationO2" type="number" />
-          <Field label="Poids (kg)" name="poids" type="number" />
-          <Field label="Taille (cm)" name="taille" type="number" />
+          <Field label="Température (°C)" name="temperature" type="number" defaultValue={v?.temperature} />
+          <Field label="Tension systolique" name="tensionSystolique" type="number" defaultValue={v?.tensionSystolique} />
+          <Field label="Tension diastolique" name="tensionDiastolique" type="number" defaultValue={v?.tensionDiastolique} />
+          <Field label="Fréquence cardiaque" name="frequenceCardiaque" type="number" defaultValue={v?.frequenceCardiaque} />
+          <Field label="Saturation O2 (%)" name="saturationO2" type="number" defaultValue={v?.saturationO2} />
+          <Field label="Poids (kg)" name="poids" type="number" defaultValue={v?.poids} />
+          <Field label="Taille (cm)" name="taille" type="number" defaultValue={v?.taille} />
         </CardBody>
       </Card>
 
       <Card>
         <CardHeader title="Conclusion" />
         <CardBody className="space-y-4">
-          <FieldTextarea label="Diagnostic" name="diagnostic" rows={3} />
-          <FieldTextarea label="Conduite à tenir" name="conduiteATenir" rows={3} />
+          <FieldTextarea label="Diagnostic" name="diagnostic" rows={3} defaultValue={v?.diagnostic} />
+          <FieldTextarea label="Conduite à tenir" name="conduiteATenir" rows={3} defaultValue={v?.conduiteATenir} />
         </CardBody>
       </Card>
 
@@ -92,7 +126,7 @@ export default function ConsultationForm({ patientId }: { patientId: string }) {
 
       <div className="flex justify-end">
         <button type="submit" disabled={enCours} className={bouton("primaire")}>
-          {enCours ? "Enregistrement..." : "Enregistrer la consultation"}
+          {enCours ? "Enregistrement..." : mode === "creer" ? "Enregistrer la consultation" : "Enregistrer les modifications"}
         </button>
       </div>
     </form>

@@ -8,6 +8,7 @@ import {
   peutEcrireDossierMedical,
   peutLireDossierMedical,
 } from "@/lib/auth-guards";
+import { enregistrerAudit } from "@/lib/audit";
 
 const createArretSchema = z
   .object({
@@ -55,6 +56,13 @@ export async function POST(request: NextRequest) {
 
     const arret = await prisma.arretTravail.create({
       data: { ...donnees, medecinId: utilisateur.id },
+    });
+
+    await enregistrerAudit({
+      patientId: patient.id,
+      utilisateurId: utilisateur.id,
+      action: "ARRET_CREE",
+      details: donnees.typeExemption,
     });
 
     return NextResponse.json({ arret }, { status: 201 });

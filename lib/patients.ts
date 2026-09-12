@@ -11,6 +11,26 @@ export interface PatientListeItem {
   unite: string;
 }
 
+const SELECT_CERTIFICAT_SUIVI_COMMANDEMENT = {
+  orderBy: { dateCertificat: "desc" as const },
+  where: { annuleLe: null },
+  take: 1,
+  select: { conclusion: true },
+};
+
+const SELECT_ARRETS_COMMANDEMENT = {
+  where: { transmisCommandement: true },
+  orderBy: { dateDebut: "desc" as const },
+  select: { dateDebut: true, dateFin: true, typeExemption: true },
+};
+
+const SELECT_PROCHAINE_CONVOCATION = {
+  where: { statut: "PLANIFIEE" as const, dateConvocation: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } },
+  orderBy: { dateConvocation: "asc" as const },
+  take: 1,
+  select: { dateConvocation: true },
+};
+
 /** Liste des patients pour un utilisateur médical/paramédical (accès complet). */
 export async function listerPatientsDossierComplet(): Promise<PatientListeItem[]> {
   return prisma.patient.findMany({
@@ -37,16 +57,9 @@ export async function listerSynthesesCommandement(): Promise<SyntheseCommandemen
         take: 1,
         select: { dateEvaluation: true },
       },
-      certificatsSuivi: {
-        orderBy: { dateCertificat: "desc" },
-        take: 1,
-        select: { conclusion: true },
-      },
-      arretsTravail: {
-        where: { transmisCommandement: true },
-        orderBy: { dateDebut: "desc" },
-        select: { dateDebut: true, dateFin: true, typeExemption: true },
-      },
+      certificatsSuivi: SELECT_CERTIFICAT_SUIVI_COMMANDEMENT,
+      arretsTravail: SELECT_ARRETS_COMMANDEMENT,
+      convocations: SELECT_PROCHAINE_CONVOCATION,
     },
   });
 
@@ -58,7 +71,7 @@ export async function listerSynthesesCommandement(): Promise<SyntheseCommandemen
       grade: patient.grade,
       unite: patient.unite,
       derniereEvaluationSigycop: patient.profilsSigycop[0]?.dateEvaluation ?? null,
-      visitePlanifieeLe: null,
+      visitePlanifieeLe: patient.convocations[0]?.dateConvocation ?? null,
       dernierConclusionSuivi: patient.certificatsSuivi[0]?.conclusion ?? null,
       arretsTransmis: patient.arretsTravail,
     })
@@ -92,16 +105,9 @@ export async function obtenirSyntheseCommandementPatient(
         take: 1,
         select: { dateEvaluation: true },
       },
-      certificatsSuivi: {
-        orderBy: { dateCertificat: "desc" },
-        take: 1,
-        select: { conclusion: true },
-      },
-      arretsTravail: {
-        where: { transmisCommandement: true },
-        orderBy: { dateDebut: "desc" },
-        select: { dateDebut: true, dateFin: true, typeExemption: true },
-      },
+      certificatsSuivi: SELECT_CERTIFICAT_SUIVI_COMMANDEMENT,
+      arretsTravail: SELECT_ARRETS_COMMANDEMENT,
+      convocations: SELECT_PROCHAINE_CONVOCATION,
     },
   });
 
@@ -114,7 +120,7 @@ export async function obtenirSyntheseCommandementPatient(
     grade: patient.grade,
     unite: patient.unite,
     derniereEvaluationSigycop: patient.profilsSigycop[0]?.dateEvaluation ?? null,
-    visitePlanifieeLe: null,
+    visitePlanifieeLe: patient.convocations[0]?.dateConvocation ?? null,
     dernierConclusionSuivi: patient.certificatsSuivi[0]?.conclusion ?? null,
     arretsTransmis: patient.arretsTravail,
   });
@@ -134,6 +140,7 @@ export async function obtenirDossierCompletPatient(patientId: string) {
           dateCertificat: true,
           lieu: true,
           pdfGenereLe: true,
+          annuleLe: true,
           medecin: { select: { nom: true, prenom: true, grade: true } },
         },
       },
@@ -145,6 +152,7 @@ export async function obtenirDossierCompletPatient(patientId: string) {
           dateCertificat: true,
           lieu: true,
           pdfGenereLe: true,
+          annuleLe: true,
           medecin: { select: { nom: true, prenom: true, grade: true } },
         },
       },
@@ -162,9 +170,42 @@ export async function obtenirDossierCompletPatient(patientId: string) {
           lieu: true,
           datePrescription: true,
           pdfGenereLe: true,
+          annuleLe: true,
           medecin: { select: { nom: true, prenom: true, grade: true } },
         },
       },
+      convocations: {
+        orderBy: { dateConvocation: "desc" },
+        include: { medecin: { select: { nom: true, prenom: true, grade: true } } },
+      },
+      journalEntries: {
+        orderBy: { createdAt: "desc" },
+        take: 100,
+        include: { utilisateur: { select: { nom: true, prenom: true, grade: true } } },
+      },
     },
+  });
+}
+
+/**
+ * Recherche globale de patients (nom, prénom ou RIO). Le COMMANDEMENT ne
+ * reçoit que les champs non sensibles — jamais de lien direct vers un
+ * dossier médical détaillé au-delà de ce que ses pages exposent déjà.
+ */
+export async function rechercherPatients(requete: string): Promise<PatientListeItem[]> {
+  const q = requete.trim();
+  if (q.length < 2) return [];
+
+  return prisma.patient.findMany({
+    where: {
+      OR: [
+        { nom: { contains: q, mode: "insensitive" } },
+        { prenom: { contains: q, mode: "insensitive" } },
+        { rio: { contains: q, mode: "insensitive" } },
+      ],
+    },
+    orderBy: [{ nom: "asc" }, { prenom: "asc" }],
+    take: 10,
+    select: { id: true, rio: true, nom: true, prenom: true, grade: true, unite: true },
   });
 }

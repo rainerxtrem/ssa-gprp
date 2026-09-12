@@ -3,26 +3,39 @@ import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
 import {
   Activity,
+  CalendarClock,
   ClipboardList,
+  Download,
   FileCheck2,
   FilePlus2,
+  History,
   Pencil,
   Pill,
   ShieldAlert,
   Stethoscope,
 } from "lucide-react";
 import { authOptions } from "@/lib/auth";
-import { isCommandement, peutEcrireDossierMedical, peutPrescrire, peutSignerCertificatAptitude } from "@/lib/auth-guards";
+import {
+  isCommandement,
+  peutEcrireDossierMedical,
+  peutGenererConvocation,
+  peutLireDossierMedical,
+  peutPrescrire,
+  peutSignerCertificatAptitude,
+} from "@/lib/auth-guards";
 import { obtenirDossierCompletPatient, obtenirSyntheseCommandementPatient } from "@/lib/patients";
 import { CONCLUSION_ENGAGEMENT_LABELS, CONCLUSION_SUIVI_LABELS } from "@/lib/sigycop";
 import { TYPE_EXEMPTION_LABELS } from "@/lib/arrets";
-import { calculerAge, formatDateFr, initiales } from "@/lib/format";
+import { STATUT_CONVOCATION_LABELS } from "@/lib/convocations";
+import { LIBELLES_ACTION_AUDIT, type ActionAudit } from "@/lib/audit";
+import { calculerAge, formatDateFr, formatDateHeureFr, initiales } from "@/lib/format";
 import { bouton } from "@/lib/ui";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Badge, badgeCouleurStatutAptitude, badgeCouleurStatutVisite } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { RecordCard } from "@/components/ui/RecordCard";
 import { Tabs } from "@/components/ui/Tabs";
+import { StatutConvocationSelect } from "@/components/patients/StatutConvocationSelect";
 
 export default async function PatientPage({
   params,
@@ -104,6 +117,7 @@ export default async function PatientPage({
   const peutEditer = peutEcrireDossierMedical(role);
   const peutCertifier = peutSignerCertificatAptitude(role);
   const peutOrdonner = peutPrescrire(role);
+  const peutConvoquer = peutGenererConvocation(role);
 
   return (
     <div>
@@ -128,16 +142,22 @@ export default async function PatientPage({
             </div>
           </div>
         </div>
-        {peutEditer && (
-          <Link href={`/dashboard/patients/${patient.id}/modifier`} className={bouton("secondaire")}>
-            <Pencil className="h-4 w-4" />
-            Modifier
-          </Link>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <a href={`/api/patients/${patient.id}/dossier-pdf`} target="_blank" rel="noreferrer" className={bouton("secondaire")}>
+            <Download className="h-4 w-4" />
+            Exporter le dossier
+          </a>
+          {peutEditer && (
+            <Link href={`/dashboard/patients/${patient.id}/modifier`} className={bouton("secondaire")}>
+              <Pencil className="h-4 w-4" />
+              Modifier
+            </Link>
+          )}
+        </div>
       </div>
 
       <Tabs
-        defaultTab={onglet === "suivi" ? "suivi" : "aptitudes"}
+        defaultTab={onglet === "suivi" ? "suivi" : onglet === "historique" ? "historique" : "aptitudes"}
         tabs={[
           {
             key: "aptitudes",
@@ -269,6 +289,7 @@ export default async function PatientPage({
                             `${c.medecin.grade} ${c.medecin.prenom} ${c.medecin.nom}`,
                             `Diagnostic : ${c.diagnostic || "non renseigné"}`,
                           ]}
+                          badges={c.annuleLe && <Badge couleur="red">Annulée</Badge>}
                           action={
                             <Link
                               href={`/dashboard/patients/${patient.id}/consultations/${c.id}`}
@@ -315,6 +336,7 @@ export default async function PatientPage({
                               `${p.medecin.grade} ${p.medecin.prenom} ${p.medecin.nom}`,
                               lignes.map((m) => m.nom).join(", ") || "Aucun médicament",
                             ]}
+                            badges={p.annuleLe && <Badge couleur="red">Annulée</Badge>}
                             action={
                               <>
                                 <Link
@@ -338,6 +360,47 @@ export default async function PatientPage({
                           />
                         );
                       })
+                    )}
+                  </CardBody>
+                </Card>
+
+                <Card>
+                  <CardHeader
+                    title="Convocations"
+                    icon={<CalendarClock className="h-4 w-4" />}
+                    action={
+                      peutConvoquer && (
+                        <Link
+                          href={`/dashboard/patients/${patient.id}/convocations/nouveau`}
+                          className={bouton("secondaire", "sm")}
+                        >
+                          <FilePlus2 className="h-4 w-4" />
+                          Nouvelle
+                        </Link>
+                      )
+                    }
+                  />
+                  <CardBody className="space-y-3">
+                    {patient.convocations.length === 0 ? (
+                      <EmptyState title="Aucune convocation enregistrée" />
+                    ) : (
+                      patient.convocations.map((c) => (
+                        <RecordCard
+                          key={c.id}
+                          title={`Visite du ${formatDateFr(c.dateConvocation)}`}
+                          lines={[
+                            `${c.medecin.grade} ${c.medecin.prenom} ${c.medecin.nom}`,
+                            c.motif,
+                          ]}
+                          action={
+                            peutConvoquer ? (
+                              <StatutConvocationSelect convocationId={c.id} statutActuel={c.statut} />
+                            ) : (
+                              <Badge couleur="slate">{STATUT_CONVOCATION_LABELS[c.statut] ?? c.statut}</Badge>
+                            )
+                          }
+                        />
+                      ))
                     )}
                   </CardBody>
                 </Card>
@@ -383,6 +446,40 @@ export default async function PatientPage({
               </div>
             ),
           },
+          {
+            key: "historique",
+            label: "Historique",
+            icon: <History className="h-4 w-4" />,
+            content: (
+              <Card>
+                <CardHeader title="Journal des modifications" description="Qui a créé, modifié ou annulé quoi, et quand." />
+                <CardBody>
+                  {patient.journalEntries.length === 0 ? (
+                    <EmptyState title="Aucune entrée dans l'historique" />
+                  ) : (
+                    <ul className="divide-y divide-slate-100">
+                      {patient.journalEntries.map((entree) => (
+                        <li key={entree.id} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                          <div>
+                            <p className="font-medium text-slate-900">
+                              {LIBELLES_ACTION_AUDIT[entree.action as ActionAudit] ?? entree.action}
+                            </p>
+                            <p className="text-sm text-slate-500">
+                              {entree.utilisateur.grade} {entree.utilisateur.prenom} {entree.utilisateur.nom}
+                            </p>
+                            {entree.details && <p className="mt-0.5 text-sm text-slate-400">{entree.details}</p>}
+                          </div>
+                          <span className="whitespace-nowrap text-xs text-slate-400">
+                            {formatDateHeureFr(entree.createdAt)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardBody>
+              </Card>
+            ),
+          },
         ]}
       />
     </div>
@@ -401,6 +498,7 @@ function ListeCertificats({
     dateCertificat: Date;
     lieu: string;
     pdfGenereLe: Date | null;
+    annuleLe: Date | null;
     medecin: { nom: string; prenom: string; grade: string };
   }[];
   type: "ENGAGEMENT" | "SUIVI";
@@ -421,6 +519,7 @@ function ListeCertificats({
             `${formatDateFr(c.dateCertificat)} à ${c.lieu}`,
             `${c.medecin.grade} ${c.medecin.prenom} ${c.medecin.nom}`,
           ]}
+          badges={c.annuleLe && <Badge couleur="red">Annulé</Badge>}
           action={
             <>
               <Link
