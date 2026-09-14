@@ -15,6 +15,7 @@ import {
   CONCLUSION_SUIVI_LABELS,
   SIGYCOP_MENTION_LEGALE,
 } from "@/lib/sigycop";
+import { genererQrCodePng } from "@/lib/pdf/qrcode";
 
 const nodeRequire = eval("require") as NodeRequire;
 const React = nodeRequire("react");
@@ -58,6 +59,8 @@ export interface CertificatPdfData {
   medecinGrade: string;
   /** PNG à fond transparent de la signature du médecin, si déposée dans son profil. */
   medecinSignaturePng?: Buffer | null;
+  /** URL de la page du certificat dans l'application, encodée en QR code de vérification. */
+  urlVerification?: string | null;
 }
 
 const styles = StyleSheet.create({
@@ -92,6 +95,9 @@ const styles = StyleSheet.create({
   signatureLine: { marginTop: 40, borderBottom: 1, borderColor: "#0f172a", width: 180 },
   signatureZone: { marginTop: 8, height: 60, width: 180, alignItems: "flex-end" },
   signatureImage: { maxHeight: 60, maxWidth: 180, objectFit: "contain" },
+  qrZone: { position: "absolute", bottom: 16, right: 36, alignItems: "center" },
+  qrImage: { width: 46, height: 46 },
+  qrLabel: { fontSize: 6, color: "#64748b", marginTop: 2 },
 });
 
 function formatDateFr(date: Date): string {
@@ -125,7 +131,7 @@ function conclusionsPossibles(type: "ENGAGEMENT" | "SUIVI"): { valeur: string; l
   return Object.entries(labels).map(([valeur, label]) => ({ valeur, label: label as string }));
 }
 
-function CertificatDocument({ data }: { data: CertificatPdfData }) {
+function CertificatDocument({ data, qrCodePng }: { data: CertificatPdfData; qrCodePng?: Buffer | null }) {
   const titre =
     data.type === "ENGAGEMENT" ? "Certificat médical d'engagement" : "Certificat de suivi des aptitudes";
 
@@ -232,10 +238,17 @@ function CertificatDocument({ data }: { data: CertificatPdfData }) {
           </View>
         </View>
 
-        <Text style={{ position: "absolute", bottom: 20, left: 36, fontSize: 7, color: "#64748b" }}>
+        <Text style={{ position: "absolute", bottom: 20, left: 36, maxWidth: 420, fontSize: 7, color: "#64748b" }}>
           Conclusion retenue : {libelleConclusion(data)} — Document généré automatiquement, à conserver
           dans le dossier médical du patient.
         </Text>
+
+        {qrCodePng && (
+          <View style={styles.qrZone}>
+            <Image style={styles.qrImage} src={{ data: qrCodePng, format: "png" }} />
+            <Text style={styles.qrLabel}>Vérifier ce document</Text>
+          </View>
+        )}
       </Page>
     </Document>
   );
@@ -243,5 +256,6 @@ function CertificatDocument({ data }: { data: CertificatPdfData }) {
 
 /** Génère le PDF du certificat et retourne son contenu binaire, prêt à être stocké en base. */
 export async function genererCertificatPdf(data: CertificatPdfData): Promise<Buffer> {
-  return renderToBuffer(<CertificatDocument data={data} />);
+  const qrCodePng = data.urlVerification ? await genererQrCodePng(data.urlVerification) : null;
+  return renderToBuffer(<CertificatDocument data={data} qrCodePng={qrCodePng} />);
 }

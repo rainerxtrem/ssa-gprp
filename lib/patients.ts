@@ -159,7 +159,13 @@ export async function obtenirDossierCompletPatient(patientId: string) {
       arretsTravail: { orderBy: { dateDebut: "desc" } },
       consultations: {
         orderBy: { dateConsultation: "desc" },
-        include: { medecin: { select: { nom: true, prenom: true, grade: true } } },
+        include: {
+          medecin: { select: { nom: true, prenom: true, grade: true } },
+          piecesJointes: {
+            orderBy: { createdAt: "desc" },
+            select: { id: true, nomFichier: true, typeMime: true, taille: true, createdAt: true },
+          },
+        },
       },
       prescriptions: {
         orderBy: { datePrescription: "desc" },
@@ -184,6 +190,15 @@ export async function obtenirDossierCompletPatient(patientId: string) {
         include: { utilisateur: { select: { nom: true, prenom: true, grade: true } } },
       },
     },
+  });
+}
+
+/** Historique des versions d'un document précis (créations/modifications/annulations). */
+export async function obtenirHistoriqueDocument(documentId: string) {
+  return prisma.journalAudit.findMany({
+    where: { documentId },
+    orderBy: { createdAt: "desc" },
+    include: { utilisateur: { select: { nom: true, prenom: true, grade: true } } },
   });
 }
 

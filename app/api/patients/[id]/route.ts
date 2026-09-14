@@ -17,6 +17,8 @@ const updatePatientSchema = z.object({
   grade: z.string().min(1),
   specialite: z.string().optional(),
   unite: z.string().min(1),
+  antecedents: z.string().max(4000).optional(),
+  allergies: z.string().max(2000).optional(),
 });
 
 // ---------------------------------------------------------------------------

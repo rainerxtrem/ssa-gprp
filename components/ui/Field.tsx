@@ -6,6 +6,8 @@ export function Field({
   type = "text",
   required = false,
   defaultValue,
+  value,
+  onChange,
   placeholder,
   className = "",
 }: {
@@ -14,6 +16,8 @@ export function Field({
   type?: string;
   required?: boolean;
   defaultValue?: string;
+  value?: string;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder?: string;
   className?: string;
 }) {
@@ -26,7 +30,8 @@ export function Field({
         name={name}
         type={type}
         required={required}
-        defaultValue={defaultValue}
+        {...(onChange ? { value: value ?? "" } : { defaultValue })}
+        onChange={onChange}
         placeholder={placeholder}
         className={champClasses}
       />
@@ -39,6 +44,8 @@ export function FieldTextarea({
   name,
   required = false,
   defaultValue,
+  value,
+  onChange,
   rows = 3,
   placeholder,
   className = "",
@@ -47,6 +54,8 @@ export function FieldTextarea({
   name: string;
   required?: boolean;
   defaultValue?: string;
+  value?: string;
+  onChange?: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   rows?: number;
   placeholder?: string;
   className?: string;
@@ -59,7 +68,8 @@ export function FieldTextarea({
       <textarea
         name={name}
         required={required}
-        defaultValue={defaultValue}
+        {...(onChange ? { value: value ?? "" } : { defaultValue })}
+        onChange={onChange}
         rows={rows}
         placeholder={placeholder}
         className={`${champClasses} resize-none`}

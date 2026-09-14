@@ -3,12 +3,15 @@ import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
 import {
   Activity,
+  AlertTriangle,
   CalendarClock,
   ClipboardList,
+  Clock,
   Download,
   FileCheck2,
   FilePlus2,
   History,
+  Paperclip,
   Pencil,
   Pill,
   ShieldAlert,
@@ -24,7 +27,7 @@ import {
   peutSignerCertificatAptitude,
 } from "@/lib/auth-guards";
 import { obtenirDossierCompletPatient, obtenirSyntheseCommandementPatient } from "@/lib/patients";
-import { CONCLUSION_ENGAGEMENT_LABELS, CONCLUSION_SUIVI_LABELS } from "@/lib/sigycop";
+import { CONCLUSION_ENGAGEMENT_LABELS, CONCLUSION_SUIVI_LABELS, depasseSeuilInaptitude } from "@/lib/sigycop";
 import { TYPE_EXEMPTION_LABELS } from "@/lib/arrets";
 import { STATUT_CONVOCATION_LABELS } from "@/lib/convocations";
 import { LIBELLES_ACTION_AUDIT, type ActionAudit } from "@/lib/audit";
@@ -35,7 +38,9 @@ import { Badge, badgeCouleurStatutAptitude, badgeCouleurStatutVisite } from "@/c
 import { EmptyState } from "@/components/ui/EmptyState";
 import { RecordCard } from "@/components/ui/RecordCard";
 import { Tabs } from "@/components/ui/Tabs";
+import { ListeAnnulables } from "@/components/ui/ListeAnnulables";
 import { StatutConvocationSelect } from "@/components/patients/StatutConvocationSelect";
+import { EvolutionConstantes } from "@/components/patients/EvolutionConstantes";
 
 export default async function PatientPage({
   params,
@@ -119,10 +124,64 @@ export default async function PatientPage({
   const peutOrdonner = peutPrescrire(role);
   const peutConvoquer = peutGenererConvocation(role);
 
+  // Vue chronologique unifiée : tous les événements du dossier, triés par date décroissante.
+  type EvenementTimeline = { date: Date; icone: React.ReactNode; titre: string; sousTitre: string; href: string; badge?: React.ReactNode };
+  const evenements: EvenementTimeline[] = [
+    ...patient.consultations.map((c) => ({
+      date: c.dateConsultation,
+      icone: <Stethoscope className="h-4 w-4" />,
+      titre: `Consultation — ${c.motif}`,
+      sousTitre: `${c.medecin.grade} ${c.medecin.prenom} ${c.medecin.nom}`,
+      href: `/dashboard/patients/${patient.id}/consultations/${c.id}`,
+      badge: c.annuleLe ? <Badge couleur="red">Annulée</Badge> : undefined,
+    })),
+    ...patient.prescriptions.map((p) => {
+      const lignes = Array.isArray(p.medicaments) ? (p.medicaments as { nom: string }[]) : [];
+      return {
+        date: p.datePrescription,
+        icone: <Pill className="h-4 w-4" />,
+        titre: `Ordonnance — ${lignes.map((m) => m.nom).join(", ") || "sans médicament"}`,
+        sousTitre: `${p.medecin.grade} ${p.medecin.prenom} ${p.medecin.nom}`,
+        href: `/dashboard/patients/${patient.id}/ordonnances/${p.id}`,
+        badge: p.annuleLe ? <Badge couleur="red">Annulée</Badge> : undefined,
+      };
+    }),
+    ...patient.certificatsSuivi.map((c) => ({
+      date: c.dateCertificat,
+      icone: <FileCheck2 className="h-4 w-4" />,
+      titre: `Certificat de suivi — ${CONCLUSION_SUIVI_LABELS[c.conclusion] ?? c.conclusion}`,
+      sousTitre: `${c.medecin.grade} ${c.medecin.prenom} ${c.medecin.nom}`,
+      href: `/dashboard/patients/${patient.id}/certificats/${c.id}?type=SUIVI`,
+      badge: c.annuleLe ? <Badge couleur="red">Annulé</Badge> : undefined,
+    })),
+    ...patient.certificatsEngagement.map((c) => ({
+      date: c.dateCertificat,
+      icone: <FileCheck2 className="h-4 w-4" />,
+      titre: `Certificat d'engagement — ${CONCLUSION_ENGAGEMENT_LABELS[c.conclusion] ?? c.conclusion}`,
+      sousTitre: `${c.medecin.grade} ${c.medecin.prenom} ${c.medecin.nom}`,
+      href: `/dashboard/patients/${patient.id}/certificats/${c.id}?type=ENGAGEMENT`,
+      badge: c.annuleLe ? <Badge couleur="red">Annulé</Badge> : undefined,
+    })),
+    ...patient.arretsTravail.map((a) => ({
+      date: a.dateDebut,
+      icone: <ClipboardList className="h-4 w-4" />,
+      titre: `${TYPE_EXEMPTION_LABELS[a.typeExemption] ?? a.typeExemption}`,
+      sousTitre: `Du ${formatDateFr(a.dateDebut)} au ${formatDateFr(a.dateFin)}`,
+      href: `/dashboard/patients/${patient.id}?onglet=suivi`,
+    })),
+    ...patient.convocations.map((c) => ({
+      date: c.dateConvocation,
+      icone: <CalendarClock className="h-4 w-4" />,
+      titre: `Convocation — ${STATUT_CONVOCATION_LABELS[c.statut] ?? c.statut}`,
+      sousTitre: `${c.medecin.grade} ${c.medecin.prenom} ${c.medecin.nom}`,
+      href: `/dashboard/patients/${patient.id}?onglet=suivi`,
+    })),
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
   return (
     <div>
       {/* En-tête du dossier */}
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4 print:hidden">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-4 print:hidden">
         <div className="flex items-center gap-4">
           <span className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 text-lg font-semibold text-emerald-800">
             {initiales(patient.nom, patient.prenom)}
@@ -156,8 +215,24 @@ export default async function PatientPage({
         </div>
       </div>
 
+      {(patient.allergies || patient.antecedents) && (
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 print:hidden">
+          {patient.allergies && (
+            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+              <p><span className="font-semibold">Allergies : </span>{patient.allergies}</p>
+            </div>
+          )}
+          {patient.antecedents && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              <p><span className="font-semibold">Antécédents : </span>{patient.antecedents}</p>
+            </div>
+          )}
+        </div>
+      )}
+
       <Tabs
-        defaultTab={onglet === "suivi" ? "suivi" : onglet === "historique" ? "historique" : "aptitudes"}
+        defaultTab={onglet === "suivi" ? "suivi" : onglet === "historique" ? "historique" : onglet === "chronologie" ? "chronologie" : "aptitudes"}
         tabs={[
           {
             key: "aptitudes",
@@ -179,21 +254,32 @@ export default async function PatientPage({
                               {["S", "I", "G", "Y", "C", "O", "P"].map((l) => (
                                 <th key={l} className="pb-2 pr-4 font-medium">{l}</th>
                               ))}
+                              <th className="pb-2 pr-4" />
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
-                            {patient.profilsSigycop.map((p) => (
-                              <tr key={p.id}>
-                                <td className="py-2 pr-4 text-slate-600">{formatDateFr(p.dateEvaluation)}</td>
-                                <td className="py-2 pr-4">{p.s}</td>
-                                <td className="py-2 pr-4">{p.i}</td>
-                                <td className="py-2 pr-4">{p.g}</td>
-                                <td className="py-2 pr-4">{p.y}</td>
-                                <td className="py-2 pr-4">{p.c}</td>
-                                <td className="py-2 pr-4">{p.o}</td>
-                                <td className="py-2 pr-4">{p.p}</td>
-                              </tr>
-                            ))}
+                            {patient.profilsSigycop.map((p) => {
+                              const depasse = depasseSeuilInaptitude(p);
+                              return (
+                                <tr key={p.id} className={depasse ? "bg-red-50" : undefined}>
+                                  <td className="py-2 pr-4 text-slate-600">{formatDateFr(p.dateEvaluation)}</td>
+                                  <td className="py-2 pr-4">{p.s}</td>
+                                  <td className="py-2 pr-4">{p.i}</td>
+                                  <td className="py-2 pr-4">{p.g}</td>
+                                  <td className="py-2 pr-4">{p.y}</td>
+                                  <td className="py-2 pr-4">{p.c}</td>
+                                  <td className="py-2 pr-4">{p.o}</td>
+                                  <td className="py-2 pr-4">{p.p}</td>
+                                  <td className="py-2 pr-4">
+                                    {depasse && (
+                                      <span title="Dépasse les seuils d'inaptitude réglementaires">
+                                        <AlertTriangle className="h-4 w-4 text-red-600" />
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -217,7 +303,7 @@ export default async function PatientPage({
                       )
                     }
                   />
-                  <CardBody className="space-y-3">
+                  <CardBody>
                     <ListeCertificats
                       certificats={patient.certificatsSuivi}
                       type="SUIVI"
@@ -243,7 +329,7 @@ export default async function PatientPage({
                       )
                     }
                   />
-                  <CardBody className="space-y-3">
+                  <CardBody>
                     <ListeCertificats
                       certificats={patient.certificatsEngagement}
                       type="ENGAGEMENT"
@@ -262,6 +348,23 @@ export default async function PatientPage({
             content: (
               <div className="space-y-6">
                 <Card>
+                  <CardHeader title="Évolution des constantes" icon={<Activity className="h-4 w-4" />} />
+                  <CardBody>
+                    <EvolutionConstantes
+                      consultations={patient.consultations.map((c) => ({
+                        dateConsultation: c.dateConsultation.toISOString(),
+                        temperature: c.temperature,
+                        tensionSystolique: c.tensionSystolique,
+                        tensionDiastolique: c.tensionDiastolique,
+                        frequenceCardiaque: c.frequenceCardiaque,
+                        saturationO2: c.saturationO2,
+                        poids: c.poids,
+                      }))}
+                    />
+                  </CardBody>
+                </Card>
+
+                <Card>
                   <CardHeader
                     title="Consultations"
                     icon={<Stethoscope className="h-4 w-4" />}
@@ -277,29 +380,52 @@ export default async function PatientPage({
                       )
                     }
                   />
-                  <CardBody className="space-y-3">
+                  <CardBody>
                     {patient.consultations.length === 0 ? (
                       <EmptyState title="Aucune consultation enregistrée" />
                     ) : (
-                      patient.consultations.map((c) => (
-                        <RecordCard
-                          key={c.id}
-                          title={`Consultation du ${formatDateFr(c.dateConsultation)}`}
-                          lines={[
-                            `${c.medecin.grade} ${c.medecin.prenom} ${c.medecin.nom}`,
-                            `Diagnostic : ${c.diagnostic || "non renseigné"}`,
-                          ]}
-                          badges={c.annuleLe && <Badge couleur="red">Annulée</Badge>}
-                          action={
-                            <Link
-                              href={`/dashboard/patients/${patient.id}/consultations/${c.id}`}
-                              className={bouton("secondaire", "sm")}
-                            >
-                              Voir plus de détails
-                            </Link>
-                          }
-                        />
-                      ))
+                      <ListeAnnulables
+                        actifs={patient.consultations
+                          .filter((c) => !c.annuleLe)
+                          .map((c) => (
+                            <RecordCard
+                              key={c.id}
+                              title={`Consultation du ${formatDateFr(c.dateConsultation)}`}
+                              lines={[
+                                `${c.medecin.grade} ${c.medecin.prenom} ${c.medecin.nom}`,
+                                `Diagnostic : ${c.diagnostic || "non renseigné"}`,
+                              ]}
+                              badges={
+                                c.piecesJointes.length > 0 && (
+                                  <Badge couleur="slate">
+                                    <Paperclip className="mr-1 inline h-3 w-3" />
+                                    {c.piecesJointes.length}
+                                  </Badge>
+                                )
+                              }
+                              action={
+                                <Link href={`/dashboard/patients/${patient.id}/consultations/${c.id}`} className={bouton("secondaire", "sm")}>
+                                  Voir plus de détails
+                                </Link>
+                              }
+                            />
+                          ))}
+                        annules={patient.consultations
+                          .filter((c) => c.annuleLe)
+                          .map((c) => (
+                            <RecordCard
+                              key={c.id}
+                              title={`Consultation du ${formatDateFr(c.dateConsultation)}`}
+                              lines={[`${c.medecin.grade} ${c.medecin.prenom} ${c.medecin.nom}`]}
+                              badges={<Badge couleur="red">Annulée</Badge>}
+                              action={
+                                <Link href={`/dashboard/patients/${patient.id}/consultations/${c.id}`} className={bouton("secondaire", "sm")}>
+                                  Voir plus de détails
+                                </Link>
+                              }
+                            />
+                          ))}
+                      />
                     )}
                   </CardBody>
                 </Card>
@@ -320,46 +446,54 @@ export default async function PatientPage({
                       )
                     }
                   />
-                  <CardBody className="space-y-3">
+                  <CardBody>
                     {patient.prescriptions.length === 0 ? (
                       <EmptyState title="Aucune ordonnance enregistrée" />
                     ) : (
-                      patient.prescriptions.map((p) => {
-                        const lignes = Array.isArray(p.medicaments)
-                          ? (p.medicaments as { nom: string }[])
-                          : [];
-                        return (
-                          <RecordCard
-                            key={p.id}
-                            title={`Ordonnance du ${formatDateFr(p.datePrescription)}`}
-                            lines={[
-                              `${p.medecin.grade} ${p.medecin.prenom} ${p.medecin.nom}`,
-                              lignes.map((m) => m.nom).join(", ") || "Aucun médicament",
-                            ]}
-                            badges={p.annuleLe && <Badge couleur="red">Annulée</Badge>}
-                            action={
-                              <>
-                                <Link
-                                  href={`/dashboard/patients/${patient.id}/ordonnances/${p.id}`}
-                                  className={bouton("secondaire", "sm")}
-                                >
+                      <ListeAnnulables
+                        actifs={patient.prescriptions
+                          .filter((p) => !p.annuleLe)
+                          .map((p) => {
+                            const lignes = Array.isArray(p.medicaments) ? (p.medicaments as { nom: string }[]) : [];
+                            return (
+                              <RecordCard
+                                key={p.id}
+                                title={`Ordonnance du ${formatDateFr(p.datePrescription)}`}
+                                lines={[
+                                  `${p.medecin.grade} ${p.medecin.prenom} ${p.medecin.nom}`,
+                                  lignes.map((m) => m.nom).join(", ") || "Aucun médicament",
+                                ]}
+                                action={
+                                  <>
+                                    <Link href={`/dashboard/patients/${patient.id}/ordonnances/${p.id}`} className={bouton("secondaire", "sm")}>
+                                      Voir plus de détails
+                                    </Link>
+                                    {p.pdfGenereLe && (
+                                      <a href={`/api/prescriptions/${p.id}/pdf`} target="_blank" rel="noreferrer" className={bouton("discret", "sm")}>
+                                        PDF
+                                      </a>
+                                    )}
+                                  </>
+                                }
+                              />
+                            );
+                          })}
+                        annules={patient.prescriptions
+                          .filter((p) => p.annuleLe)
+                          .map((p) => (
+                            <RecordCard
+                              key={p.id}
+                              title={`Ordonnance du ${formatDateFr(p.datePrescription)}`}
+                              lines={[`${p.medecin.grade} ${p.medecin.prenom} ${p.medecin.nom}`]}
+                              badges={<Badge couleur="red">Annulée</Badge>}
+                              action={
+                                <Link href={`/dashboard/patients/${patient.id}/ordonnances/${p.id}`} className={bouton("secondaire", "sm")}>
                                   Voir plus de détails
                                 </Link>
-                                {p.pdfGenereLe && (
-                                  <a
-                                    href={`/api/prescriptions/${p.id}/pdf`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className={bouton("discret", "sm")}
-                                  >
-                                    PDF
-                                  </a>
-                                )}
-                              </>
-                            }
-                          />
-                        );
-                      })
+                              }
+                            />
+                          ))}
+                      />
                     )}
                   </CardBody>
                 </Card>
@@ -388,10 +522,7 @@ export default async function PatientPage({
                         <RecordCard
                           key={c.id}
                           title={`Visite du ${formatDateFr(c.dateConvocation)}`}
-                          lines={[
-                            `${c.medecin.grade} ${c.medecin.prenom} ${c.medecin.nom}`,
-                            c.motif,
-                          ]}
+                          lines={[`${c.medecin.grade} ${c.medecin.prenom} ${c.medecin.nom}`, c.motif]}
                           action={
                             peutConvoquer ? (
                               <StatutConvocationSelect convocationId={c.id} statutActuel={c.statut} />
@@ -429,10 +560,7 @@ export default async function PatientPage({
                         <RecordCard
                           key={a.id}
                           title={TYPE_EXEMPTION_LABELS[a.typeExemption] ?? a.typeExemption}
-                          lines={[
-                            `Du ${formatDateFr(a.dateDebut)} au ${formatDateFr(a.dateFin)}`,
-                            a.motif,
-                          ]}
+                          lines={[`Du ${formatDateFr(a.dateDebut)} au ${formatDateFr(a.dateFin)}`, a.motif]}
                           badges={
                             <Badge couleur={a.transmisCommandement ? "emerald" : "slate"}>
                               {a.transmisCommandement ? "Transmis au commandement" : "Non transmis"}
@@ -444,6 +572,39 @@ export default async function PatientPage({
                   </CardBody>
                 </Card>
               </div>
+            ),
+          },
+          {
+            key: "chronologie",
+            label: "Chronologie",
+            icon: <Clock className="h-4 w-4" />,
+            content: (
+              <Card>
+                <CardHeader title="Tous les événements du dossier" description="Vue unifiée, triée par date" />
+                <CardBody>
+                  {evenements.length === 0 ? (
+                    <EmptyState title="Aucun événement enregistré" />
+                  ) : (
+                    <ul className="divide-y divide-slate-100">
+                      {evenements.map((ev, idx) => (
+                        <li key={idx} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                          <div className="mt-0.5 flex-shrink-0 rounded-lg bg-slate-100 p-1.5 text-slate-500">{ev.icone}</div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Link href={ev.href} className="font-medium text-slate-900 hover:text-emerald-800 hover:underline">
+                                {ev.titre}
+                              </Link>
+                              {ev.badge}
+                            </div>
+                            <p className="text-sm text-slate-500">{ev.sousTitre}</p>
+                          </div>
+                          <span className="whitespace-nowrap text-xs text-slate-400">{formatDateFr(ev.date)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardBody>
+              </Card>
             ),
           },
           {
@@ -509,39 +670,31 @@ function ListeCertificats({
     return <EmptyState title="Aucun certificat" />;
   }
 
+  const carte = (c: (typeof certificats)[number]) => (
+    <RecordCard
+      key={c.id}
+      title={labels[c.conclusion] ?? c.conclusion}
+      lines={[`${formatDateFr(c.dateCertificat)} à ${c.lieu}`, `${c.medecin.grade} ${c.medecin.prenom} ${c.medecin.nom}`]}
+      badges={c.annuleLe && <Badge couleur="red">Annulé</Badge>}
+      action={
+        <>
+          <Link href={`/dashboard/patients/${patientId}/certificats/${c.id}?type=${type}`} className={bouton("secondaire", "sm")}>
+            Voir plus de détails
+          </Link>
+          {c.pdfGenereLe && (
+            <a href={`/api/certificats/${c.id}/pdf?type=${type}`} target="_blank" rel="noreferrer" className={bouton("discret", "sm")}>
+              PDF
+            </a>
+          )}
+        </>
+      }
+    />
+  );
+
   return (
-    <>
-      {certificats.map((c) => (
-        <RecordCard
-          key={c.id}
-          title={labels[c.conclusion] ?? c.conclusion}
-          lines={[
-            `${formatDateFr(c.dateCertificat)} à ${c.lieu}`,
-            `${c.medecin.grade} ${c.medecin.prenom} ${c.medecin.nom}`,
-          ]}
-          badges={c.annuleLe && <Badge couleur="red">Annulé</Badge>}
-          action={
-            <>
-              <Link
-                href={`/dashboard/patients/${patientId}/certificats/${c.id}?type=${type}`}
-                className={bouton("secondaire", "sm")}
-              >
-                Voir plus de détails
-              </Link>
-              {c.pdfGenereLe && (
-                <a
-                  href={`/api/certificats/${c.id}/pdf?type=${type}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={bouton("discret", "sm")}
-                >
-                  PDF
-                </a>
-              )}
-            </>
-          }
-        />
-      ))}
-    </>
+    <ListeAnnulables
+      actifs={certificats.filter((c) => !c.annuleLe).map(carte)}
+      annules={certificats.filter((c) => c.annuleLe).map(carte)}
+    />
   );
 }

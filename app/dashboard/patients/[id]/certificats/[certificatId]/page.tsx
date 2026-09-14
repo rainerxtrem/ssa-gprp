@@ -1,13 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
-import { Pencil } from "lucide-react";
+import { History, Pencil } from "lucide-react";
 import { authOptions } from "@/lib/auth";
-import { peutLireDossierMedical, peutSignerCertificatAptitude } from "@/lib/auth-guards";
+import { peutLireDossierMedical, peutSignerCertificatAptitude, peutSupprimerDefinitivement } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
+import { obtenirHistoriqueDocument } from "@/lib/patients";
+import { LIBELLES_ACTION_AUDIT, type ActionAudit } from "@/lib/audit";
+import { formatDateHeureFr } from "@/lib/format";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { bouton } from "@/lib/ui";
 import { AnnulerAction } from "@/components/ui/AnnulerAction";
+import { SupprimerDefinitivementAction } from "@/components/ui/SupprimerDefinitivementAction";
 import { Badge } from "@/components/ui/Badge";
 import CertificatAptitudeForm, {
   type CertificatAptitudeData,
@@ -43,6 +48,7 @@ export default async function CertificatDetailPage({
   if (!certificat || certificat.patientId !== id) notFound();
 
   const peutEditer = peutSignerCertificatAptitude(role) && !certificat.annuleLe;
+  const historique = await obtenirHistoriqueDocument(certificatId);
 
   const data: CertificatAptitudeData = {
     nom: certificat.nom,
@@ -113,13 +119,56 @@ export default async function CertificatDetailPage({
 
       <CertificatAptitudeForm type={type} data={data} editable={false} />
 
-      {peutEditer && (
+      {historique.length > 0 && (
         <div className="mx-auto mt-4 max-w-3xl print:hidden">
-          <AnnulerAction
-            endpoint={`/api/certificats/${certificat.id}/annuler`}
-            corpsSupplementaire={{ type }}
-            confirmationLabel="Annuler ce certificat"
-          />
+          <Card>
+            <CardHeader title="Historique des versions" icon={<History className="h-4 w-4" />} />
+            <CardBody>
+              <ul className="divide-y divide-slate-100">
+                {historique.map((entree) => {
+                  const avant = entree.donneesAvant as Record<string, unknown> | null;
+                  return (
+                    <li key={entree.id} className="py-3 text-sm first:pt-0 last:pb-0">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-medium text-slate-900">
+                          {LIBELLES_ACTION_AUDIT[entree.action as ActionAudit] ?? entree.action}
+                        </span>
+                        <span className="text-xs text-slate-400">{formatDateHeureFr(entree.createdAt)}</span>
+                      </div>
+                      <p className="text-slate-500">
+                        {entree.utilisateur.grade} {entree.utilisateur.prenom} {entree.utilisateur.nom}
+                      </p>
+                      {avant && (
+                        <p className="mt-1 rounded bg-slate-50 px-2 py-1 font-mono text-xs text-slate-600">
+                          Avant : SIGYCOP {String(avant.s)}{String(avant.i)}{String(avant.g)}{String(avant.y)}
+                          {String(avant.c)}{String(avant.o)}{String(avant.p)} — {String(avant.conclusion)}
+                        </p>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardBody>
+          </Card>
+        </div>
+      )}
+
+      {(peutEditer || peutSupprimerDefinitivement(role)) && (
+        <div className="mx-auto mt-4 flex max-w-3xl flex-wrap gap-2 print:hidden">
+          {peutEditer && (
+            <AnnulerAction
+              endpoint={`/api/certificats/${certificat.id}/annuler`}
+              corpsSupplementaire={{ type }}
+              confirmationLabel="Annuler ce certificat"
+            />
+          )}
+          {peutSupprimerDefinitivement(role) && (
+            <SupprimerDefinitivementAction
+              endpoint={`/api/certificats/${certificat.id}`}
+              corpsSupplementaire={{ type }}
+              redirectionApres={`/dashboard/patients/${id}?onglet=aptitudes`}
+            />
+          )}
         </div>
       )}
     </div>

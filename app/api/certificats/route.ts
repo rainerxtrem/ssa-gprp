@@ -9,6 +9,7 @@ import {
   peutSignerCertificatAptitude,
 } from "@/lib/auth-guards";
 import { genererCertificatPdf } from "@/lib/pdf/certificat";
+import { urlBase } from "@/lib/pdf/qrcode";
 import { enregistrerAudit } from "@/lib/audit";
 import { creerCertificatSchema } from "@/lib/validation/certificat";
 
@@ -105,6 +106,7 @@ export async function POST(request: NextRequest) {
         medecinNomComplet: `${medecin.prenom} ${medecin.nom}`,
         medecinSignaturePng: medecin.signature,
         medecinGrade: medecin.grade,
+        urlVerification: `${urlBase()}/dashboard/patients/${patient.id}/certificats/${certificat.id}?type=${donnees.type}`,
       });
 
       certificatFinal =
@@ -126,6 +128,7 @@ export async function POST(request: NextRequest) {
       utilisateurId: utilisateur.id,
       action: "CERTIFICAT_CREE",
       details: `${donnees.type} — ${donnees.conclusion}`,
+      documentId: certificat.id,
     });
 
     const { pdf: _pdf, ...certificatSansPdf } = certificatFinal;

@@ -1,16 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
-import { Activity, Pencil, Stethoscope } from "lucide-react";
+import { Activity, Paperclip, Pencil, Stethoscope } from "lucide-react";
 import { authOptions } from "@/lib/auth";
-import { peutEcrireDossierMedical, peutLireDossierMedical } from "@/lib/auth-guards";
+import { peutEcrireDossierMedical, peutLireDossierMedical, peutSupprimerDefinitivement } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
 import { formatDateHeureFr } from "@/lib/format";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { PrintButton } from "@/components/ui/PrintButton";
 import { AnnulerAction } from "@/components/ui/AnnulerAction";
+import { SupprimerDefinitivementAction } from "@/components/ui/SupprimerDefinitivementAction";
 import { Badge } from "@/components/ui/Badge";
+import { PieceJointeUploader } from "@/components/patients/PieceJointeUploader";
 import { bouton } from "@/lib/ui";
 
 export default async function ConsultationDetailPage({
@@ -26,7 +28,14 @@ export default async function ConsultationDetailPage({
 
   const consultation = await prisma.consultation.findUnique({
     where: { id: consultationId },
-    include: { medecin: { select: { nom: true, prenom: true, grade: true } }, patient: true },
+    include: {
+      medecin: { select: { nom: true, prenom: true, grade: true } },
+      patient: true,
+      piecesJointes: {
+        orderBy: { createdAt: "desc" },
+        select: { id: true, nomFichier: true, typeMime: true, taille: true, createdAt: true },
+      },
+    },
   });
   if (!consultation || consultation.patientId !== id) notFound();
 
@@ -115,6 +124,17 @@ export default async function ConsultationDetailPage({
           </Card>
         )}
 
+        <Card>
+          <CardHeader title="Pièces jointes" icon={<Paperclip className="h-4 w-4" />} />
+          <CardBody>
+            <PieceJointeUploader
+              consultationId={consultation.id}
+              pieces={consultation.piecesJointes.map((p) => ({ ...p, createdAt: p.createdAt.toISOString() }))}
+              peutModifier={peutEditer}
+            />
+          </CardBody>
+        </Card>
+
         {(consultation.diagnostic || consultation.conduiteATenir) && (
           <Card>
             <CardHeader title="Conclusion" />
@@ -136,12 +156,20 @@ export default async function ConsultationDetailPage({
         )}
       </div>
 
-      {peutEditer && (
-        <div className="mt-4 print:hidden">
-          <AnnulerAction
-            endpoint={`/api/consultations/${consultation.id}/annuler`}
-            confirmationLabel="Annuler cette consultation"
-          />
+      {(peutEditer || peutSupprimerDefinitivement(role)) && (
+        <div className="mt-4 flex flex-wrap gap-2 print:hidden">
+          {peutEditer && (
+            <AnnulerAction
+              endpoint={`/api/consultations/${consultation.id}/annuler`}
+              confirmationLabel="Annuler cette consultation"
+            />
+          )}
+          {peutSupprimerDefinitivement(role) && (
+            <SupprimerDefinitivementAction
+              endpoint={`/api/consultations/${consultation.id}`}
+              redirectionApres={`/dashboard/patients/${id}?onglet=suivi`}
+            />
+          )}
         </div>
       )}
     </div>

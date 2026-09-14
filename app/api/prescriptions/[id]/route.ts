@@ -6,8 +6,10 @@ import {
   getSessionUtilisateur,
   interdireAccesDossierMedicalAuCommandement,
   peutPrescrire,
+  peutSupprimerDefinitivement,
 } from "@/lib/auth-guards";
 import { genererOrdonnancePdf } from "@/lib/pdf/ordonnance";
+import { urlBase } from "@/lib/pdf/qrcode";
 import { enregistrerAudit } from "@/lib/audit";
 import { champsPrescriptionSchema } from "@/lib/validation/prescription";
 
@@ -66,6 +68,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         medecinNomComplet: `${medecin.prenom} ${medecin.nom}`,
         medecinSignaturePng: medecin.signature,
         medecinGrade: medecin.grade,
+        urlVerification: `${urlBase()}/dashboard/patients/${patient.id}/ordonnances/${id}`,
       });
       prescriptionFinale = await prisma.prescription.update({
         where: { id },
@@ -92,6 +95,51 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: "Données invalides.", details: error.flatten() }, { status: 400 });
     }
     console.error("[PATCH /api/prescriptions/[id]]", error);
+    return NextResponse.json({ error: "Erreur interne du serveur." }, { status: 500 });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// DELETE /api/prescriptions/[id] — suppression définitive, réservée au médecin-chef.
+// ---------------------------------------------------------------------------
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+    const utilisateur = await getSessionUtilisateur();
+    interdireAccesDossierMedicalAuCommandement(utilisateur.role);
+
+    if (!peutSupprimerDefinitivement(utilisateur.role)) {
+      return NextResponse.json(
+        { error: "Seul le médecin-chef peut supprimer définitivement un document." },
+        { status: 403 }
+      );
+    }
+
+    const { motif } = z.object({ motif: z.string().min(1, "Le motif est requis.") }).parse(await request.json());
+
+    const prescription = await prisma.prescription.findUnique({ where: { id } });
+    if (!prescription) return NextResponse.json({ error: "Ordonnance introuvable." }, { status: 404 });
+
+    await enregistrerAudit({
+      patientId: prescription.patientId,
+      utilisateurId: utilisateur.id,
+      action: "ORDONNANCE_SUPPRIMEE",
+      details: motif,
+      documentId: id,
+    });
+
+    await prisma.prescription.delete({ where: { id } });
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof AccesRefuseError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: "Données invalides.", details: error.flatten() }, { status: 400 });
+    }
+    console.error("[DELETE /api/prescriptions/[id]]", error);
     return NextResponse.json({ error: "Erreur interne du serveur." }, { status: 500 });
   }
 }

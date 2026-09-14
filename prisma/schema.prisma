@@ -97,6 +97,7 @@ model User {
   arretsTravail         ArretTravail[]             @relation("MedecinArretsTravail")
   convocations          Convocation[]              @relation("MedecinConvocations")
   journalEntries        JournalAudit[]             @relation("AuteurJournal")
+  piecesJointesAjoutees PieceJointe[]              @relation("AjouteParPieceJointe")
 
   @@map("users")
 }
@@ -110,6 +111,12 @@ model Patient {
   grade      String
   specialite String?
   unite      String
+
+  // Affichés en tête de dossier ; les allergies déclenchent une alerte lors
+  // de la rédaction d'une ordonnance.
+  antecedents String? @db.Text
+  allergies   String? @db.Text
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -302,6 +309,8 @@ model Consultation {
   patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
   patientId String
 
+  piecesJointes PieceJointe[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -387,6 +396,12 @@ model JournalAudit {
   action  String
   details String? @db.Text
 
+  // Identifie le document concerné (certificat, ordonnance...) pour pouvoir
+  // reconstituer son historique de versions. `donneesAvant` capture l'état
+  // du document juste avant une modification.
+  documentId   String?
+  donneesAvant Json?
+
   utilisateur   User   @relation("AuteurJournal", fields: [utilisateurId], references: [id])
   utilisateurId String
 
@@ -396,5 +411,26 @@ model JournalAudit {
   createdAt DateTime @default(now())
 
   @@index([patientId])
+  @@index([documentId])
   @@map("journal_audit")
+}
+
+/// Pièce jointe à une consultation (résultat de laboratoire, imagerie...).
+model PieceJointe {
+  id         String @id @default(cuid())
+  nomFichier String
+  typeMime   String
+  taille     Int
+  contenu    Bytes
+
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  consultationId String
+
+  ajoutePar   User   @relation("AjouteParPieceJointe", fields: [ajouteParId], references: [id])
+  ajouteParId String
+
+  createdAt DateTime @default(now())
+
+  @@index([consultationId])
+  @@map("pieces_jointes")
 }

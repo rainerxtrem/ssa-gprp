@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Field } from "@/components/ui/Field";
+import { Field, FieldTextarea } from "@/components/ui/Field";
 import { Card, CardBody } from "@/components/ui/Card";
 import { bouton } from "@/lib/ui";
 
@@ -14,6 +14,8 @@ export interface PatientFormValues {
   grade: string;
   specialite: string;
   unite: string;
+  antecedents: string;
+  allergies: string;
 }
 
 export default function PatientForm({
@@ -43,6 +45,8 @@ export default function PatientForm({
       grade: form.get("grade"),
       specialite: form.get("specialite") || undefined,
       unite: form.get("unite"),
+      antecedents: form.get("antecedents") || undefined,
+      allergies: form.get("allergies") || undefined,
     };
 
     const url = mode === "creer" ? "/api/patients" : `/api/patients/${patientId}`;
@@ -80,6 +84,19 @@ export default function PatientForm({
             <Field label="Unité" name="unite" required defaultValue={valeursInitiales?.unite} />
           </div>
           <Field label="Spécialité" name="specialite" defaultValue={valeursInitiales?.specialite} />
+          <FieldTextarea
+            label="Antécédents médicaux"
+            name="antecedents"
+            rows={3}
+            defaultValue={valeursInitiales?.antecedents}
+          />
+          <FieldTextarea
+            label="Allergies"
+            name="allergies"
+            rows={2}
+            placeholder="Pénicilline, arachide..."
+            defaultValue={valeursInitiales?.allergies}
+          />
 
           {erreur && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</p>

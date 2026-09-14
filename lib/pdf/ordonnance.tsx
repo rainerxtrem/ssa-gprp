@@ -9,6 +9,8 @@
 // the eval indirection) sidesteps that condition entirely, so the elements
 // this file creates are recognized by react-pdf's renderer instead of
 // crashing with a minified React error #31.
+import { genererQrCodePng } from "@/lib/pdf/qrcode";
+
 const nodeRequire = eval("require") as NodeRequire;
 const React = nodeRequire("react");
 const { Document, Page, Text, View, Image, StyleSheet, renderToBuffer } = nodeRequire("@react-pdf/renderer");
@@ -34,6 +36,8 @@ export interface OrdonnancePdfData {
   lieu: string;
   /** PNG à fond transparent de la signature du médecin, si déposée dans son profil. */
   medecinSignaturePng?: Buffer | null;
+  /** URL de la page de l'ordonnance dans l'application, encodée en QR code de vérification. */
+  urlVerification?: string | null;
 }
 
 const styles = StyleSheet.create({
@@ -51,13 +55,16 @@ const styles = StyleSheet.create({
   signatureLine: { marginTop: 40, borderBottom: 1, borderColor: "#0f172a", width: 180 },
   signatureZone: { marginTop: 8, height: 60, width: 180, alignItems: "flex-end" },
   signatureImage: { maxHeight: 60, maxWidth: 180, objectFit: "contain" },
+  qrZone: { position: "absolute", bottom: 16, right: 40, alignItems: "center" },
+  qrImage: { width: 46, height: 46 },
+  qrLabel: { fontSize: 6, color: "#64748b", marginTop: 2 },
 });
 
 function formatDateFr(date: Date): string {
   return date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-function OrdonnanceDocument({ data }: { data: OrdonnancePdfData }) {
+function OrdonnanceDocument({ data, qrCodePng }: { data: OrdonnancePdfData; qrCodePng?: Buffer | null }) {
   return (
     <Document title={`Ordonnance - ${data.patientNom} ${data.patientPrenom}`} author="Service de Santé des Armées">
       <Page size="A4" style={styles.page}>
@@ -107,14 +114,22 @@ function OrdonnanceDocument({ data }: { data: OrdonnancePdfData }) {
           </View>
         </View>
 
-        <Text style={{ position: "absolute", bottom: 20, left: 40, fontSize: 7, color: "#64748b" }}>
+        <Text style={{ position: "absolute", bottom: 20, left: 40, maxWidth: 420, fontSize: 7, color: "#64748b" }}>
           Document généré automatiquement, à conserver dans le dossier médical du patient.
         </Text>
+
+        {qrCodePng && (
+          <View style={styles.qrZone}>
+            <Image style={styles.qrImage} src={{ data: qrCodePng, format: "png" }} />
+            <Text style={styles.qrLabel}>Vérifier ce document</Text>
+          </View>
+        )}
       </Page>
     </Document>
   );
 }
 
 export async function genererOrdonnancePdf(data: OrdonnancePdfData): Promise<Buffer> {
-  return renderToBuffer(<OrdonnanceDocument data={data} />);
+  const qrCodePng = data.urlVerification ? await genererQrCodePng(data.urlVerification) : null;
+  return renderToBuffer(<OrdonnanceDocument data={data} qrCodePng={qrCodePng} />);
 }

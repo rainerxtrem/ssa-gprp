@@ -6,8 +6,10 @@ import {
   getSessionUtilisateur,
   interdireAccesDossierMedicalAuCommandement,
   peutSignerCertificatAptitude,
+  peutSupprimerDefinitivement,
 } from "@/lib/auth-guards";
 import { genererCertificatPdf } from "@/lib/pdf/certificat";
+import { urlBase } from "@/lib/pdf/qrcode";
 import { enregistrerAudit } from "@/lib/audit";
 import { modifierCertificatSchema } from "@/lib/validation/certificat";
 
@@ -97,6 +99,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         medecinNomComplet: `${medecin.prenom} ${medecin.nom}`,
         medecinSignaturePng: medecin.signature,
         medecinGrade: medecin.grade,
+        urlVerification: `${urlBase()}/dashboard/patients/${patient.id}/certificats/${id}?type=${donnees.type}`,
       });
 
       certificatFinal =
@@ -107,11 +110,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       console.error("[PATCH /api/certificats/[id]] Génération PDF échouée", erreurPdf);
     }
 
+    const { pdf: _pdfAvant, ...existantSansPdf } = existant;
     await enregistrerAudit({
       patientId: patient.id,
       utilisateurId: utilisateur.id,
       action: "CERTIFICAT_MODIFIE",
       details: `${donnees.type} — ${donnees.conclusion}`,
+      documentId: id,
+      donneesAvant: existantSansPdf,
     });
 
     const { pdf: _pdf, ...certificatSansPdf } = certificatFinal;
@@ -124,6 +130,66 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: "Données invalides.", details: error.flatten() }, { status: 400 });
     }
     console.error("[PATCH /api/certificats/[id]]", error);
+    return NextResponse.json({ error: "Erreur interne du serveur." }, { status: 500 });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// DELETE /api/certificats/[id] — suppression définitive, réservée au médecin-chef.
+// ---------------------------------------------------------------------------
+
+const supprimerSchema = z.object({
+  type: z.enum(["ENGAGEMENT", "SUIVI"]),
+  motif: z.string().min(1, "Le motif est requis."),
+});
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+    const utilisateur = await getSessionUtilisateur();
+    interdireAccesDossierMedicalAuCommandement(utilisateur.role);
+
+    if (!peutSupprimerDefinitivement(utilisateur.role)) {
+      return NextResponse.json(
+        { error: "Seul le médecin-chef peut supprimer définitivement un document." },
+        { status: 403 }
+      );
+    }
+
+    const { type, motif } = supprimerSchema.parse(await request.json());
+
+    const certificat =
+      type === "ENGAGEMENT"
+        ? await prisma.certificatEngagement.findUnique({ where: { id } })
+        : await prisma.certificatSuiviAptitudes.findUnique({ where: { id } });
+    if (!certificat) return NextResponse.json({ error: "Certificat introuvable." }, { status: 404 });
+
+    await enregistrerAudit({
+      patientId: certificat.patientId,
+      utilisateurId: utilisateur.id,
+      action: "CERTIFICAT_SUPPRIME",
+      details: `${type} — ${motif}`,
+      documentId: id,
+    });
+
+    if (type === "ENGAGEMENT") {
+      await prisma.certificatEngagement.delete({ where: { id } });
+    } else {
+      await prisma.certificatSuiviAptitudes.delete({ where: { id } });
+    }
+    if (certificat.profilSigycopId) {
+      await prisma.profilSigycop.delete({ where: { id: certificat.profilSigycopId } }).catch(() => {});
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof AccesRefuseError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: "Données invalides.", details: error.flatten() }, { status: 400 });
+    }
+    console.error("[DELETE /api/certificats/[id]]", error);
     return NextResponse.json({ error: "Erreur interne du serveur." }, { status: 500 });
   }
 }

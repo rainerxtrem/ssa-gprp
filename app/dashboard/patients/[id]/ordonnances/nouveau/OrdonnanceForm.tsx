@@ -8,6 +8,7 @@ import { Field, FieldTextarea } from "@/components/ui/Field";
 import { bouton, champClasses, labelClasses } from "@/lib/ui";
 import { BIBLIOTHEQUE_MEDICAMENTS, analyserLigneMedicament } from "@/lib/medicaments";
 import { detecterInteractions } from "@/lib/interactions";
+import { resoudreProtocoles } from "@/lib/ordonnanceTemplates";
 
 export interface LigneMedicament {
   nom: string;
@@ -30,11 +31,13 @@ export default function OrdonnanceForm({
   mode = "creer",
   prescriptionId,
   valeursInitiales,
+  allergiesPatient,
 }: {
   patientId: string;
   mode?: "creer" | "modifier";
   prescriptionId?: string;
   valeursInitiales?: OrdonnanceValeurs;
+  allergiesPatient?: string | null;
 }) {
   const router = useRouter();
   const [medicaments, setMedicaments] = useState<LigneMedicament[]>(
@@ -44,6 +47,14 @@ export default function OrdonnanceForm({
   );
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
+  const protocoles = useMemo(() => resoudreProtocoles(), []);
+
+  function appliquerProtocole(nomProtocole: string) {
+    if (!nomProtocole) return;
+    const protocole = protocoles.find((p) => p.nom === nomProtocole);
+    if (!protocole || protocole.lignes.length === 0) return;
+    setMedicaments(protocole.lignes.map((l) => ({ ...l })));
+  }
 
   const alertesInteraction = useMemo(
     () => detecterInteractions(medicaments.map((m) => m.nom.trim()).filter(Boolean)),
@@ -122,6 +133,28 @@ export default function OrdonnanceForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      {allergiesPatient && (
+        <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <p><span className="font-semibold">Allergies connues du patient : </span>{allergiesPatient}</p>
+        </div>
+      )}
+
+      <Card>
+        <CardBody>
+          <span className={labelClasses}>Protocole (facultatif)</span>
+          <select defaultValue="" onChange={(e) => appliquerProtocole(e.target.value)} className={champClasses}>
+            <option value="">Aucun — composer manuellement</option>
+            {protocoles.map((p) => (
+              <option key={p.nom} value={p.nom}>
+                {p.nom}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-slate-400">Remplace les lignes ci-dessous par le protocole choisi, toutes restent modifiables.</p>
+        </CardBody>
+      </Card>
+
       {alertesInteraction.length > 0 && (
         <div className="space-y-2">
           {alertesInteraction.map((a, idx) => (

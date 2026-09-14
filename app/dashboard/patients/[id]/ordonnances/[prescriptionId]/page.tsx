@@ -3,13 +3,14 @@ import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { Pencil, Pill, RefreshCcw } from "lucide-react";
 import { authOptions } from "@/lib/auth";
-import { peutLireDossierMedical, peutPrescrire } from "@/lib/auth-guards";
+import { peutLireDossierMedical, peutPrescrire, peutSupprimerDefinitivement } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
 import { formatDateFr } from "@/lib/format";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { PrintButton } from "@/components/ui/PrintButton";
 import { AnnulerAction } from "@/components/ui/AnnulerAction";
+import { SupprimerDefinitivementAction } from "@/components/ui/SupprimerDefinitivementAction";
 import { Badge } from "@/components/ui/Badge";
 import { bouton } from "@/lib/ui";
 
@@ -118,9 +119,17 @@ export default async function OrdonnanceDetailPage({
         </Card>
       )}
 
-      {peutEditer && (
-        <div className="mt-4 print:hidden">
-          <AnnulerAction endpoint={`/api/prescriptions/${prescription.id}/annuler`} confirmationLabel="Annuler cette ordonnance" />
+      {(peutEditer || peutSupprimerDefinitivement(role)) && (
+        <div className="mt-4 flex flex-wrap gap-2 print:hidden">
+          {peutEditer && (
+            <AnnulerAction endpoint={`/api/prescriptions/${prescription.id}/annuler`} confirmationLabel="Annuler cette ordonnance" />
+          )}
+          {peutSupprimerDefinitivement(role) && (
+            <SupprimerDefinitivementAction
+              endpoint={`/api/prescriptions/${prescription.id}`}
+              redirectionApres={`/dashboard/patients/${id}?onglet=suivi`}
+            />
+          )}
         </div>
       )}
     </div>

@@ -35,6 +35,8 @@ export default async function ModifierPatientPage({ params }: { params: Promise<
           grade: patient.grade,
           specialite: patient.specialite ?? "",
           unite: patient.unite,
+          antecedents: patient.antecedents ?? "",
+          allergies: patient.allergies ?? "",
         }}
       />
     </div>

@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Printer, Save } from "lucide-react";
+import { AlertTriangle, Printer, Save } from "lucide-react";
 import {
   APTITUDE_STATUS_LABELS,
   CONCLUSION_ENGAGEMENT_LABELS,
   CONCLUSION_SUIVI_LABELS,
   SIGYCOP_MENTION_LEGALE,
+  depasseSeuilInaptitude,
 } from "@/lib/sigycop";
 import { bouton } from "@/lib/ui";
 
@@ -116,6 +117,8 @@ export default function CertificatAptitudeForm({
     onChange?.(suivant);
   }
 
+  const depasse = depasseSeuilInaptitude(local);
+
   return (
     <div className="mx-auto max-w-3xl">
       <style>{`
@@ -124,6 +127,13 @@ export default function CertificatAptitudeForm({
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       `}</style>
+
+      {depasse && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 print:hidden">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <p>Un ou plusieurs coefficients SIGYCOP dépassent les seuils d&apos;inaptitude réglementaires ({SIGYCOP_MENTION_LEGALE.replace("Au-delà de ces valeurs, inaptitude déclarée : ", "")}).</p>
+        </div>
+      )}
 
       <div className="mb-4 flex justify-end gap-2 print:hidden">
         {editable && onSubmit && (

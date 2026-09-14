@@ -22,7 +22,7 @@ export default async function NouvelleOrdonnancePage({
 
   const patient = await prisma.patient.findUnique({
     where: { id },
-    select: { id: true, nom: true, prenom: true, grade: true },
+    select: { id: true, nom: true, prenom: true, grade: true, allergies: true },
   });
   if (!patient) notFound();
 
@@ -58,7 +58,7 @@ export default async function NouvelleOrdonnancePage({
         backHref={`/dashboard/patients/${patient.id}?onglet=suivi`}
         backLabel="Retour au dossier"
       />
-      <OrdonnanceForm patientId={patient.id} valeursInitiales={valeursInitiales} />
+      <OrdonnanceForm patientId={patient.id} valeursInitiales={valeursInitiales} allergiesPatient={patient.allergies} />
     </div>
   );
 }

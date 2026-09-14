@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Field, FieldTextarea } from "@/components/ui/Field";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
-import { bouton } from "@/lib/ui";
+import { bouton, champClasses, labelClasses } from "@/lib/ui";
+import { MODELES_CONSULTATION } from "@/lib/consultationTemplates";
 
 export interface ConsultationValeurs {
   motif: string;
@@ -21,6 +22,21 @@ export interface ConsultationValeurs {
   conduiteATenir: string;
 }
 
+const VALEURS_VIDES: ConsultationValeurs = {
+  motif: "",
+  anamnese: "",
+  examenClinique: "",
+  temperature: "",
+  tensionSystolique: "",
+  tensionDiastolique: "",
+  frequenceCardiaque: "",
+  saturationO2: "",
+  poids: "",
+  taille: "",
+  diagnostic: "",
+  conduiteATenir: "",
+};
+
 export default function ConsultationForm({
   patientId,
   mode = "creer",
@@ -33,8 +49,27 @@ export default function ConsultationForm({
   valeursInitiales?: ConsultationValeurs;
 }) {
   const router = useRouter();
+  const [champs, setChamps] = useState<ConsultationValeurs>(valeursInitiales ?? VALEURS_VIDES);
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
+
+  function maj(champ: keyof ConsultationValeurs, valeur: string) {
+    setChamps((c) => ({ ...c, [champ]: valeur }));
+  }
+
+  function appliquerModele(indexStr: string) {
+    if (indexStr === "") return;
+    const modele = MODELES_CONSULTATION[Number(indexStr)];
+    if (!modele) return;
+    setChamps((c) => ({
+      ...c,
+      motif: modele.motif,
+      anamnese: modele.anamnese ?? "",
+      examenClinique: modele.examenClinique ?? "",
+      diagnostic: modele.diagnostic ?? "",
+      conduiteATenir: modele.conduiteATenir ?? "",
+    }));
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -49,9 +84,9 @@ export default function ConsultationForm({
 
     const payload = {
       ...(mode === "creer" ? { patientId } : {}),
-      motif: form.get("motif"),
-      anamnese: form.get("anamnese") || undefined,
-      examenClinique: form.get("examenClinique") || undefined,
+      motif: champs.motif,
+      anamnese: champs.anamnese || undefined,
+      examenClinique: champs.examenClinique || undefined,
       temperature: nombreOuUndefined("temperature"),
       tensionSystolique: nombreOuUndefined("tensionSystolique"),
       tensionDiastolique: nombreOuUndefined("tensionDiastolique"),
@@ -59,8 +94,8 @@ export default function ConsultationForm({
       saturationO2: nombreOuUndefined("saturationO2"),
       poids: nombreOuUndefined("poids"),
       taille: nombreOuUndefined("taille"),
-      diagnostic: form.get("diagnostic") || undefined,
-      conduiteATenir: form.get("conduiteATenir") || undefined,
+      diagnostic: champs.diagnostic || undefined,
+      conduiteATenir: champs.conduiteATenir || undefined,
     };
 
     const url = mode === "creer" ? "/api/consultations" : `/api/consultations/${consultationId}`;
@@ -88,37 +123,64 @@ export default function ConsultationForm({
     router.refresh();
   }
 
-  const v = valeursInitiales;
-
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      {mode === "creer" && (
+        <Card>
+          <CardBody>
+            <span className={labelClasses}>Modèle de consultation (facultatif)</span>
+            <select defaultValue="" onChange={(e) => appliquerModele(e.target.value)} className={champClasses}>
+              <option value="">Aucun — saisie libre</option>
+              {MODELES_CONSULTATION.map((m, i) => (
+                <option key={m.motif} value={i}>
+                  {m.motif}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-400">Pré-remplit les champs ci-dessous, tous restent modifiables.</p>
+          </CardBody>
+        </Card>
+      )}
+
       <Card>
         <CardHeader title="Motif et anamnèse" />
         <CardBody className="space-y-4">
-          <Field label="Motif de consultation" name="motif" required defaultValue={v?.motif} />
-          <FieldTextarea label="Anamnèse" name="anamnese" rows={3} defaultValue={v?.anamnese} />
-          <FieldTextarea label="Examen clinique" name="examenClinique" rows={3} defaultValue={v?.examenClinique} />
+          <Field label="Motif de consultation" name="motif" required value={champs.motif} onChange={(e) => maj("motif", e.target.value)} />
+          <FieldTextarea label="Anamnèse" name="anamnese" rows={3} value={champs.anamnese} onChange={(e) => maj("anamnese", e.target.value)} />
+          <FieldTextarea
+            label="Examen clinique"
+            name="examenClinique"
+            rows={3}
+            value={champs.examenClinique}
+            onChange={(e) => maj("examenClinique", e.target.value)}
+          />
         </CardBody>
       </Card>
 
       <Card>
         <CardHeader title="Constantes" description="Facultatif — laisser vide si non mesuré" />
         <CardBody className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <Field label="Température (°C)" name="temperature" type="number" defaultValue={v?.temperature} />
-          <Field label="Tension systolique" name="tensionSystolique" type="number" defaultValue={v?.tensionSystolique} />
-          <Field label="Tension diastolique" name="tensionDiastolique" type="number" defaultValue={v?.tensionDiastolique} />
-          <Field label="Fréquence cardiaque" name="frequenceCardiaque" type="number" defaultValue={v?.frequenceCardiaque} />
-          <Field label="Saturation O2 (%)" name="saturationO2" type="number" defaultValue={v?.saturationO2} />
-          <Field label="Poids (kg)" name="poids" type="number" defaultValue={v?.poids} />
-          <Field label="Taille (cm)" name="taille" type="number" defaultValue={v?.taille} />
+          <Field label="Température (°C)" name="temperature" type="number" defaultValue={champs.temperature} />
+          <Field label="Tension systolique" name="tensionSystolique" type="number" defaultValue={champs.tensionSystolique} />
+          <Field label="Tension diastolique" name="tensionDiastolique" type="number" defaultValue={champs.tensionDiastolique} />
+          <Field label="Fréquence cardiaque" name="frequenceCardiaque" type="number" defaultValue={champs.frequenceCardiaque} />
+          <Field label="Saturation O2 (%)" name="saturationO2" type="number" defaultValue={champs.saturationO2} />
+          <Field label="Poids (kg)" name="poids" type="number" defaultValue={champs.poids} />
+          <Field label="Taille (cm)" name="taille" type="number" defaultValue={champs.taille} />
         </CardBody>
       </Card>
 
       <Card>
         <CardHeader title="Conclusion" />
         <CardBody className="space-y-4">
-          <FieldTextarea label="Diagnostic" name="diagnostic" rows={3} defaultValue={v?.diagnostic} />
-          <FieldTextarea label="Conduite à tenir" name="conduiteATenir" rows={3} defaultValue={v?.conduiteATenir} />
+          <FieldTextarea label="Diagnostic" name="diagnostic" rows={3} value={champs.diagnostic} onChange={(e) => maj("diagnostic", e.target.value)} />
+          <FieldTextarea
+            label="Conduite à tenir"
+            name="conduiteATenir"
+            rows={3}
+            value={champs.conduiteATenir}
+            onChange={(e) => maj("conduiteATenir", e.target.value)}
+          />
         </CardBody>
       </Card>
 

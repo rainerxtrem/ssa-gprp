@@ -83,6 +83,14 @@ export function peutGererUtilisateurs(role: Role): boolean {
   return role === Role.MEDECIN_CHEF;
 }
 
+/**
+ * Suppression définitive (irréversible, hors du circuit d'annulation avec
+ * traçabilité) d'un document manifestement erroné : réservée au médecin-chef.
+ */
+export function peutSupprimerDefinitivement(role: Role): boolean {
+  return role === Role.MEDECIN_CHEF;
+}
+
 // ---------------------------------------------------------------------------
 // Contrôle d'accès pour les Route Handlers
 // ---------------------------------------------------------------------------

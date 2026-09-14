@@ -9,6 +9,7 @@ import {
   peutPrescrire,
 } from "@/lib/auth-guards";
 import { genererOrdonnancePdf } from "@/lib/pdf/ordonnance";
+import { urlBase } from "@/lib/pdf/qrcode";
 import { enregistrerAudit } from "@/lib/audit";
 import { champsPrescriptionSchema } from "@/lib/validation/prescription";
 
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
         medecinNomComplet: `${medecin.prenom} ${medecin.nom}`,
         medecinSignaturePng: medecin.signature,
         medecinGrade: medecin.grade,
+        urlVerification: `${urlBase()}/dashboard/patients/${patient.id}/ordonnances/${prescription.id}`,
       });
 
       prescriptionFinale = await prisma.prescription.update({

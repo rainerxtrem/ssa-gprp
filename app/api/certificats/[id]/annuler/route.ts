@@ -42,6 +42,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       utilisateurId: utilisateur.id,
       action: "CERTIFICAT_ANNULE",
       details: `${type} — ${motif}`,
+      documentId: id,
     });
 
     const { pdf: _pdf, ...certificatSansPdf } = certificat;

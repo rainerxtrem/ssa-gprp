@@ -23,6 +23,8 @@ export default async function ModifierOrdonnancePage({
     redirect(`/dashboard/patients/${id}/ordonnances/${prescriptionId}`);
   }
 
+  const patient = await prisma.patient.findUnique({ where: { id }, select: { allergies: true } });
+
   const lignes = Array.isArray(prescription.medicaments)
     ? (prescription.medicaments as { nom: string; dosage?: string; forme?: string; posologie: string; duree: string }[])
     : [];
@@ -49,6 +51,7 @@ export default async function ModifierOrdonnancePage({
           instructions: prescription.instructions ?? "",
           lieu: prescription.lieu,
         }}
+        allergiesPatient={patient?.allergies}
       />
     </div>
   );
