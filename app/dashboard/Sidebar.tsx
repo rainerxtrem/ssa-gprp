@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, LogOut, ShieldCheck, UserCog, Users } from "lucide-react";
+import { LayoutDashboard, LogOut, PenLine, ShieldCheck, UserCog, Users } from "lucide-react";
 import { libelleRole } from "@/lib/format";
 import { PatientSearch } from "@/components/dashboard/PatientSearch";
 
@@ -26,6 +26,7 @@ export default function Sidebar({
     ...(estMedecinChef
       ? [{ href: "/dashboard/admin/utilisateurs", label: "Utilisateurs", icon: UserCog, exact: false }]
       : []),
+    { href: "/dashboard/profil", label: "Mon profil", icon: PenLine, exact: false },
   ];
 
   return (

@@ -103,6 +103,7 @@ export async function POST(request: NextRequest) {
         lieu: donnees.lieu,
         dateCertificat,
         medecinNomComplet: `${medecin.prenom} ${medecin.nom}`,
+        medecinSignaturePng: medecin.signature,
         medecinGrade: medecin.grade,
       });
 

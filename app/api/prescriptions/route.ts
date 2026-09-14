@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
         datePrescription,
         lieu: donnees.lieu,
         medecinNomComplet: `${medecin.prenom} ${medecin.nom}`,
+        medecinSignaturePng: medecin.signature,
         medecinGrade: medecin.grade,
       });
 

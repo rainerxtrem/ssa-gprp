@@ -80,6 +80,12 @@ model User {
   role         Role
   grade        String
   actif        Boolean  @default(true)
+
+  // Signature manuscrite (PNG fond transparent), apposée automatiquement
+  // sur les certificats et ordonnances générés par cet utilisateur.
+  signature       Bytes?
+  signatureAjoutee DateTime?
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

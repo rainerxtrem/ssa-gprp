@@ -18,7 +18,7 @@ import {
 
 const nodeRequire = eval("require") as NodeRequire;
 const React = nodeRequire("react");
-const { Document, Page, Text, View, StyleSheet, renderToBuffer } = nodeRequire("@react-pdf/renderer");
+const { Document, Page, Text, View, Image, StyleSheet, renderToBuffer } = nodeRequire("@react-pdf/renderer");
 
 type AptitudeStatus = "APTE" | "APTE_RESTRICTION" | "INAPTE" | "NON_EVALUE";
 
@@ -56,6 +56,8 @@ export interface CertificatPdfData {
   dateCertificat: Date;
   medecinNomComplet: string;
   medecinGrade: string;
+  /** PNG à fond transparent de la signature du médecin, si déposée dans son profil. */
+  medecinSignaturePng?: Buffer | null;
 }
 
 const styles = StyleSheet.create({
@@ -88,6 +90,8 @@ const styles = StyleSheet.create({
   bulletChecked: { backgroundColor: "#0f172a" },
   footerRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 24 },
   signatureLine: { marginTop: 40, borderBottom: 1, borderColor: "#0f172a", width: 180 },
+  signatureZone: { marginTop: 8, height: 60, width: 180, alignItems: "flex-end" },
+  signatureImage: { maxHeight: 60, maxWidth: 180, objectFit: "contain" },
 });
 
 function formatDateFr(date: Date): string {
@@ -218,7 +222,13 @@ function CertificatDocument({ data }: { data: CertificatPdfData }) {
           <View style={{ alignItems: "flex-end" }}>
             <Text style={styles.label}>Signature et cachet du médecin</Text>
             <Text>{data.medecinGrade} {data.medecinNomComplet}</Text>
-            <View style={styles.signatureLine} />
+            {data.medecinSignaturePng ? (
+              <View style={styles.signatureZone}>
+                <Image style={styles.signatureImage} src={{ data: data.medecinSignaturePng, format: "png" }} />
+              </View>
+            ) : (
+              <View style={styles.signatureLine} />
+            )}
           </View>
         </View>
 

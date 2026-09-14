@@ -95,6 +95,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         lieu: donnees.lieu,
         dateCertificat,
         medecinNomComplet: `${medecin.prenom} ${medecin.nom}`,
+        medecinSignaturePng: medecin.signature,
         medecinGrade: medecin.grade,
       });
 

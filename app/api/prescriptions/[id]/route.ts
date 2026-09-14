@@ -64,6 +64,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         datePrescription,
         lieu: donnees.lieu,
         medecinNomComplet: `${medecin.prenom} ${medecin.nom}`,
+        medecinSignaturePng: medecin.signature,
         medecinGrade: medecin.grade,
       });
       prescriptionFinale = await prisma.prescription.update({
