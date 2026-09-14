@@ -1,18 +1,15 @@
 import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { peutCreerConsultationSuiviInfirmier, peutEcrireDossierMedical } from "@/lib/auth-guards";
+import { peutSignalerInaptitude } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/ui/PageHeader";
-import ConsultationForm from "./ConsultationForm";
+import SignalementForm from "./SignalementForm";
 
-export default async function NouvelleConsultationPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function NouveauSignalementPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await getServerSession(authOptions);
-  const role = session!.user.role;
-  const estMedecin = peutEcrireDossierMedical(role);
-  const estParamedical = peutCreerConsultationSuiviInfirmier(role);
-  if (!estMedecin && !estParamedical) {
+  if (!peutSignalerInaptitude(session!.user.role)) {
     redirect(`/dashboard/patients/${id}`);
   }
 
@@ -25,12 +22,12 @@ export default async function NouvelleConsultationPage({ params }: { params: Pro
   return (
     <div>
       <PageHeader
-        title={estMedecin ? "Nouvelle consultation" : "Nouveau suivi infirmier"}
+        title="Signaler une suspicion d'inaptitude"
         description={`${patient.grade} ${patient.nom} ${patient.prenom}`}
-        backHref={`/dashboard/patients/${patient.id}?onglet=suivi`}
+        backHref={`/dashboard/patients/${patient.id}?onglet=aptitudes`}
         backLabel="Retour au dossier"
       />
-      <ConsultationForm patientId={patient.id} forcerSuiviInfirmier={!estMedecin} />
+      <SignalementForm patientId={patient.id} />
     </div>
   );
 }

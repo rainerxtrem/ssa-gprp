@@ -13,12 +13,14 @@ export default function NouveauCertificatClient({
   donneesInitiales,
   mode = "creer",
   certificatId,
+  signalementId,
 }: {
   type: CertificatType;
   patientId: string;
   donneesInitiales: CertificatAptitudeData;
   mode?: "creer" | "modifier";
   certificatId?: string;
+  signalementId?: string;
 }) {
   const router = useRouter();
   const [erreur, setErreur] = useState<string | null>(null);
@@ -40,6 +42,7 @@ export default function NouveauCertificatClient({
     const corps = {
       type,
       ...(mode === "creer" ? { patientId } : {}),
+      ...(mode === "creer" && signalementId ? { signalementId } : {}),
       sigycop: { s: data.s, i: data.i, g: data.g, y: data.y, c: data.c, o: data.o, p: data.p },
       aptitudes: {
         aptitudeGeneraleSPP: data.aptitudeGeneraleSPP,

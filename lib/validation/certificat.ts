@@ -64,5 +64,8 @@ export const creerCertificatSchema = z.discriminatedUnion("type", [
       "INAPTE_TEMPORAIRE_A_SERVIR",
       "INAPTE_DEFINITIF_A_SERVIR",
     ]),
+    // Renseigné lorsque ce certificat homologue un signalement d'inaptitude
+    // déclaré par un paramédical (voir SignalementInaptitude).
+    signalementId: z.string().optional(),
   }),
 ]);

@@ -42,7 +42,11 @@ export default async function CertificatDetailPage({
         })
       : await prisma.certificatSuiviAptitudes.findUnique({
           where: { id: certificatId },
-          include: { medecin: { select: { nom: true, prenom: true, grade: true } }, patient: { select: { grade: true, specialite: true } } },
+          include: {
+            medecin: { select: { nom: true, prenom: true, grade: true } },
+            patient: { select: { grade: true, specialite: true } },
+            signalementOrigine: { include: { infirmier: { select: { nom: true, prenom: true, grade: true } } } },
+          },
         });
 
   if (!certificat || certificat.patientId !== id) notFound();
@@ -114,6 +118,13 @@ export default async function CertificatDetailPage({
         <div className="mb-4 flex items-center gap-2 print:hidden">
           <Badge couleur="red">Annulé</Badge>
           {certificat.annuleMotif && <span className="text-sm text-slate-500">{certificat.annuleMotif}</span>}
+        </div>
+      )}
+
+      {"signalementOrigine" in certificat && certificat.signalementOrigine && (
+        <div className="mx-auto mb-4 max-w-3xl rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800 print:hidden">
+          Homologation du signalement déclaré par {certificat.signalementOrigine.infirmier.grade}{" "}
+          {certificat.signalementOrigine.infirmier.prenom} {certificat.signalementOrigine.infirmier.nom}.
         </div>
       )}
 

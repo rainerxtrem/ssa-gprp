@@ -5,6 +5,7 @@ import {
   AccesRefuseError,
   getSessionUtilisateur,
   interdireAccesDossierMedicalAuCommandement,
+  peutCreerConsultationSuiviInfirmier,
   peutEcrireDossierMedical,
 } from "@/lib/auth-guards";
 import { enregistrerAudit } from "@/lib/audit";
@@ -17,8 +18,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const utilisateur = await getSessionUtilisateur();
     interdireAccesDossierMedicalAuCommandement(utilisateur.role);
 
-    if (!peutEcrireDossierMedical(utilisateur.role)) {
-      return NextResponse.json({ error: "Seul un médecin peut annuler une consultation." }, { status: 403 });
+    const existante = await prisma.consultation.findUnique({ where: { id } });
+    if (!existante) return NextResponse.json({ error: "Consultation introuvable." }, { status: 404 });
+
+    const estMedecin = peutEcrireDossierMedical(utilisateur.role);
+    const estAuteurSuiviInfirmier =
+      peutCreerConsultationSuiviInfirmier(utilisateur.role) &&
+      existante.type === "SUIVI_INFIRMIER" &&
+      existante.medecinId === utilisateur.id;
+    if (!estMedecin && !estAuteurSuiviInfirmier) {
+      return NextResponse.json({ error: "Vous n'êtes pas autorisé à annuler cette consultation." }, { status: 403 });
     }
 
     const { motif } = annulerSchema.parse(await request.json());

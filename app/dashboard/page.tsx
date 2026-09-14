@@ -2,10 +2,12 @@ import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { AlertTriangle, ArrowRight, ShieldAlert, Stethoscope, UserPlus, Users } from "lucide-react";
 import { authOptions } from "@/lib/auth";
-import { isCommandement, isMedecin } from "@/lib/auth-guards";
-import { listerPatientsPourRole } from "@/lib/patients";
+import { isCommandement, isMedecin, isParamedical } from "@/lib/auth-guards";
+import { listerPatientsPourRole, listerPatientsEnSuiviInfirmier, listerSignalementsEnAttente } from "@/lib/patients";
+import { formatDateFr } from "@/lib/format";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { RecordCard } from "@/components/ui/RecordCard";
 import { bouton } from "@/lib/ui";
 import type { SyntheseCommandement } from "@/lib/auth-guards";
 
@@ -16,6 +18,9 @@ export default async function DashboardHomePage() {
 
   const nbPatients = vue.mode === "commandement" ? vue.syntheses.length : vue.patients.length;
   const enRetard = vue.mode === "commandement" ? vue.syntheses.filter((s) => s.statutVisite === "En retard").length : 0;
+
+  const signalementsEnAttente = isMedecin(role) ? await listerSignalementsEnAttente() : [];
+  const patientsEnSuivi = isParamedical(role) ? await listerPatientsEnSuiviInfirmier(session!.user.id) : [];
 
   return (
     <div>
@@ -39,6 +44,15 @@ export default async function DashboardHomePage() {
             valeur={enRetard}
             alerte={enRetard > 0}
           />
+        ) : isMedecin(role) ? (
+          <StatCard
+            icon={<ShieldAlert className="h-5 w-5" />}
+            label="Signalements en attente"
+            valeur={signalementsEnAttente.length}
+            alerte={signalementsEnAttente.length > 0}
+          />
+        ) : isParamedical(role) ? (
+          <StatCard icon={<Stethoscope className="h-5 w-5" />} label="Patients en suivi infirmier" valeur={patientsEnSuivi.length} />
         ) : (
           <StatCard icon={<Stethoscope className="h-5 w-5" />} label="Rôle" valeurTexte="Dossier médical complet" />
         )}
@@ -58,6 +72,12 @@ export default async function DashboardHomePage() {
                   Ajouter un patient
                 </Link>
               )}
+              {isMedecin(role) && signalementsEnAttente.length > 0 && (
+                <Link href="/dashboard/signalements" className={bouton("secondaire", "sm") + " justify-start"}>
+                  <ShieldAlert className="h-4 w-4" />
+                  Traiter les signalements
+                </Link>
+              )}
               <Link href="/dashboard/patients" className={bouton("primaire", "sm") + " justify-start"}>
                 Voir les patients
                 <ArrowRight className="h-4 w-4" />
@@ -66,6 +86,54 @@ export default async function DashboardHomePage() {
           </CardBody>
         </Card>
       </div>
+
+      {isMedecin(role) && signalementsEnAttente.length > 0 && (
+        <Card className="mt-6">
+          <CardHeader
+            title="Signalements d'inaptitude en attente"
+            description="Suivis infirmiers ayant conduit à une suspicion d'inaptitude"
+            action={
+              <Link href="/dashboard/signalements" className={bouton("secondaire", "sm")}>
+                Tout voir
+              </Link>
+            }
+          />
+          <CardBody className="space-y-3">
+            {signalementsEnAttente.slice(0, 5).map((s) => (
+              <RecordCard
+                key={s.id}
+                title={`${s.patient.grade} ${s.patient.nom} ${s.patient.prenom} — ${s.motif}`}
+                lines={[`${s.patient.unite} · déclaré par ${s.infirmier.grade} ${s.infirmier.prenom} ${s.infirmier.nom}`]}
+                action={
+                  <Link href={`/dashboard/signalements`} className={bouton("secondaire", "sm")}>
+                    Traiter
+                  </Link>
+                }
+              />
+            ))}
+          </CardBody>
+        </Card>
+      )}
+
+      {isParamedical(role) && patientsEnSuivi.length > 0 && (
+        <Card className="mt-6">
+          <CardHeader title="Mes patients en suivi infirmier" description="Suivi de maladie chronique / post-pathologie" />
+          <CardBody className="space-y-3">
+            {patientsEnSuivi.slice(0, 8).map((p) => (
+              <RecordCard
+                key={p.patient.id}
+                title={`${p.patient.grade} ${p.patient.nom} ${p.patient.prenom}`}
+                lines={[`${p.patient.unite}`, `Dernier suivi le ${formatDateFr(p.derniereConsultation)} — ${p.motif}`]}
+                action={
+                  <Link href={`/dashboard/patients/${p.patient.id}?onglet=suivi`} className={bouton("secondaire", "sm")}>
+                    Voir le dossier
+                  </Link>
+                }
+              />
+            ))}
+          </CardBody>
+        </Card>
+      )}
 
       {vue.mode === "commandement" && (
         <div className="mt-6">

@@ -47,6 +47,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Médecin introuvable." }, { status: 404 });
     }
 
+    // Homologation d'un signalement d'inaptitude infirmier : le certificat créé
+    // ici en devient la décision officielle, tracée dans les deux sens.
+    const signalementId = donnees.type === "SUIVI" ? donnees.signalementId : undefined;
+    if (signalementId) {
+      const signalement = await prisma.signalementInaptitude.findUnique({ where: { id: signalementId } });
+      if (!signalement || signalement.patientId !== patient.id) {
+        return NextResponse.json({ error: "Signalement introuvable." }, { status: 404 });
+      }
+      if (signalement.statut !== "EN_ATTENTE") {
+        return NextResponse.json({ error: "Ce signalement a déjà été traité." }, { status: 409 });
+      }
+    }
+
     const certificat = await prisma.$transaction(async (tx) => {
       // Mise à jour automatique du profil SIGYCOP du patient à chaque nouveau certificat.
       const profilSigycop = await tx.profilSigycop.create({
@@ -79,9 +92,23 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      return tx.certificatSuiviAptitudes.create({
+      const nouveauCertificat = await tx.certificatSuiviAptitudes.create({
         data: { ...donneesCommunes, conclusion: donnees.conclusion },
       });
+
+      if (signalementId) {
+        await tx.signalementInaptitude.update({
+          where: { id: signalementId },
+          data: {
+            statut: "HOMOLOGUE",
+            medecinId: utilisateur.id,
+            certificatSuiviId: nouveauCertificat.id,
+            traiteLe: new Date(),
+          },
+        });
+      }
+
+      return nouveauCertificat;
     });
 
     // Génération du PDF et stockage direct dans le dossier du patient (colonne `pdf` du certificat).
@@ -130,6 +157,16 @@ export async function POST(request: NextRequest) {
       details: `${donnees.type} — ${donnees.conclusion}`,
       documentId: certificat.id,
     });
+
+    if (signalementId) {
+      await enregistrerAudit({
+        patientId: patient.id,
+        utilisateurId: utilisateur.id,
+        action: "SIGNALEMENT_HOMOLOGUE",
+        details: donnees.conclusion,
+        documentId: signalementId,
+      });
+    }
 
     const { pdf: _pdf, ...certificatSansPdf } = certificatFinal;
     return NextResponse.json({ certificat: certificatSansPdf }, { status: 201 });

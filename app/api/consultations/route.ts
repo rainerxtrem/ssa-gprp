@@ -5,6 +5,7 @@ import {
   AccesRefuseError,
   getSessionUtilisateur,
   interdireAccesDossierMedicalAuCommandement,
+  peutCreerConsultationSuiviInfirmier,
   peutEcrireDossierMedical,
   peutLireDossierMedical,
 } from "@/lib/auth-guards";
@@ -24,14 +25,22 @@ export async function POST(request: NextRequest) {
     const utilisateur = await getSessionUtilisateur();
     interdireAccesDossierMedicalAuCommandement(utilisateur.role);
 
-    if (!peutEcrireDossierMedical(utilisateur.role)) {
+    const donnees = createConsultationSchema.parse(await request.json());
+
+    // Un médecin rédige librement ; un paramédical ne peut créer qu'une
+    // consultation de suivi infirmier autonome (maladie chronique,
+    // post-pathologie) — jamais une consultation médicale classique.
+    const estMedecin = peutEcrireDossierMedical(utilisateur.role);
+    const estSuiviInfirmier = peutCreerConsultationSuiviInfirmier(utilisateur.role) && donnees.type === "SUIVI_INFIRMIER";
+    if (!estMedecin && !estSuiviInfirmier) {
       return NextResponse.json(
-        { error: "Seul un médecin peut rédiger une consultation." },
+        {
+          error:
+            "Seul un médecin peut rédiger une consultation médicale. Un paramédical ne peut créer qu'une consultation de suivi infirmier.",
+        },
         { status: 403 }
       );
     }
-
-    const donnees = createConsultationSchema.parse(await request.json());
 
     const patient = await prisma.patient.findUnique({ where: { id: donnees.patientId } });
     if (!patient) {
@@ -41,6 +50,7 @@ export async function POST(request: NextRequest) {
     const consultation = await prisma.consultation.create({
       data: {
         ...donnees,
+        type: estMedecin ? donnees.type ?? "MEDICALE" : "SUIVI_INFIRMIER",
         dateConsultation: donnees.dateConsultation ?? new Date(),
         medecinId: utilisateur.id,
       },

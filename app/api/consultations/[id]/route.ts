@@ -5,6 +5,7 @@ import {
   AccesRefuseError,
   getSessionUtilisateur,
   interdireAccesDossierMedicalAuCommandement,
+  peutCreerConsultationSuiviInfirmier,
   peutEcrireDossierMedical,
   peutSupprimerDefinitivement,
 } from "@/lib/auth-guards";
@@ -21,20 +22,30 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const utilisateur = await getSessionUtilisateur();
     interdireAccesDossierMedicalAuCommandement(utilisateur.role);
 
-    if (!peutEcrireDossierMedical(utilisateur.role)) {
+    const existante = await prisma.consultation.findUnique({ where: { id } });
+    if (!existante) return NextResponse.json({ error: "Consultation introuvable." }, { status: 404 });
+
+    // Un médecin modifie toute consultation ; un paramédical ne modifie que
+    // ses propres consultations de suivi infirmier, sans jamais changer le type.
+    const estMedecin = peutEcrireDossierMedical(utilisateur.role);
+    const estAuteurSuiviInfirmier =
+      peutCreerConsultationSuiviInfirmier(utilisateur.role) &&
+      existante.type === "SUIVI_INFIRMIER" &&
+      existante.medecinId === utilisateur.id;
+    if (!estMedecin && !estAuteurSuiviInfirmier) {
       return NextResponse.json(
-        { error: "Seul un médecin peut modifier une consultation." },
+        { error: "Vous n'êtes pas autorisé à modifier cette consultation." },
         { status: 403 }
       );
     }
-
-    const existante = await prisma.consultation.findUnique({ where: { id } });
-    if (!existante) return NextResponse.json({ error: "Consultation introuvable." }, { status: 404 });
     if (existante.annuleLe) {
       return NextResponse.json({ error: "Une consultation annulée ne peut plus être modifiée." }, { status: 409 });
     }
 
     const donnees = champsConsultationSchema.parse(await request.json());
+    if (!estMedecin) {
+      donnees.type = "SUIVI_INFIRMIER";
+    }
 
     const consultation = await prisma.consultation.update({ where: { id }, data: donnees });
 

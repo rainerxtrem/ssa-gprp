@@ -68,6 +68,34 @@ export function peutGenererConvocation(role: Role): boolean {
   return isMedecin(role) || isParamedical(role);
 }
 
+/**
+ * Suivi infirmier autonome (maladie chronique, post-pathologie) : le paramédical
+ * peut créer ce type de consultation sans qu'un médecin l'ait rédigée, mais elle
+ * ne peut jamais conclure à une inaptitude — voir peutSignalerInaptitude.
+ */
+export function peutCreerConsultationSuiviInfirmier(role: Role): boolean {
+  return isParamedical(role);
+}
+
+/**
+ * Signalement d'une suspicion d'inaptitude repérée pendant un suivi infirmier.
+ * Ce n'est jamais une décision d'aptitude : elle doit être homologuée par un
+ * médecin (peutHomologuerSignalement) avant de donner lieu à un certificat.
+ */
+export function peutSignalerInaptitude(role: Role): boolean {
+  return isParamedical(role);
+}
+
+/** Homologation (validation/rejet) d'un signalement d'inaptitude infirmier : réservée aux médicaux. */
+export function peutHomologuerSignalement(role: Role): boolean {
+  return isMedecin(role);
+}
+
+/** Désignation des médecins référents par unité : réservée au médecin-chef. */
+export function peutGererReferents(role: Role): boolean {
+  return role === Role.MEDECIN_CHEF;
+}
+
 /** Rédaction d'une prescription / ordonnance : réservé aux médicaux. */
 export function peutPrescrire(role: Role): boolean {
   return isMedecin(role);

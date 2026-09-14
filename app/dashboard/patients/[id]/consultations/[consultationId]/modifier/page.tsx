@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { peutEcrireDossierMedical } from "@/lib/auth-guards";
+import { peutCreerConsultationSuiviInfirmier, peutEcrireDossierMedical } from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/ui/PageHeader";
 import ConsultationForm from "../../nouveau/ConsultationForm";
@@ -17,12 +17,19 @@ export default async function ModifierConsultationPage({
 }) {
   const { id, consultationId } = await params;
   const session = await getServerSession(authOptions);
-  if (!peutEcrireDossierMedical(session!.user.role)) {
-    redirect(`/dashboard/patients/${id}/consultations/${consultationId}`);
-  }
+  const role = session!.user.role;
 
   const consultation = await prisma.consultation.findUnique({ where: { id: consultationId } });
   if (!consultation || consultation.patientId !== id) notFound();
+
+  const peutEditer =
+    peutEcrireDossierMedical(role) ||
+    (peutCreerConsultationSuiviInfirmier(role) &&
+      consultation.type === "SUIVI_INFIRMIER" &&
+      consultation.medecinId === session!.user.id);
+  if (!peutEditer) {
+    redirect(`/dashboard/patients/${id}/consultations/${consultationId}`);
+  }
   if (consultation.annuleLe) {
     redirect(`/dashboard/patients/${id}/consultations/${consultationId}`);
   }
@@ -38,6 +45,7 @@ export default async function ModifierConsultationPage({
         patientId={id}
         mode="modifier"
         consultationId={consultation.id}
+        forcerSuiviInfirmier={consultation.type === "SUIVI_INFIRMIER" && !peutEcrireDossierMedical(role)}
         valeursInitiales={{
           motif: consultation.motif,
           anamnese: consultation.anamnese ?? "",

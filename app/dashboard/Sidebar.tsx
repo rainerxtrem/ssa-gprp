@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, LogOut, PenLine, ShieldCheck, UserCog, Users } from "lucide-react";
+import { LayoutDashboard, LogOut, PenLine, ShieldAlert, ShieldCheck, UserCog, Users } from "lucide-react";
 import { libelleRole } from "@/lib/format";
 import { PatientSearch } from "@/components/dashboard/PatientSearch";
 
@@ -19,12 +19,19 @@ export default function Sidebar({
   const pathname = usePathname();
   const estCommandement = role === "COMMANDEMENT";
   const estMedecinChef = role === "MEDECIN_CHEF";
+  const estMedecin = ["MEDECIN_CHEF", "MEDECIN_PRINCIPAL", "MEDECIN_ARMES", "INTERNE_MEDECINE", "EXTERNE_MEDECINE"].includes(
+    role
+  );
 
   const liens = [
     { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard, exact: true },
     { href: "/dashboard/patients", label: "Patients", icon: Users, exact: false },
+    ...(estMedecin ? [{ href: "/dashboard/signalements", label: "Signalements", icon: ShieldAlert, exact: false }] : []),
     ...(estMedecinChef
-      ? [{ href: "/dashboard/admin/utilisateurs", label: "Utilisateurs", icon: UserCog, exact: false }]
+      ? [
+          { href: "/dashboard/admin/utilisateurs", label: "Utilisateurs", icon: UserCog, exact: false },
+          { href: "/dashboard/admin/referents", label: "Référents", icon: ShieldCheck, exact: false },
+        ]
       : []),
     { href: "/dashboard/profil", label: "Mon profil", icon: PenLine, exact: false },
   ];

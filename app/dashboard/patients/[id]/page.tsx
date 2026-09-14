@@ -20,10 +20,12 @@ import {
 import { authOptions } from "@/lib/auth";
 import {
   isCommandement,
+  peutCreerConsultationSuiviInfirmier,
   peutEcrireDossierMedical,
   peutGenererConvocation,
   peutLireDossierMedical,
   peutPrescrire,
+  peutSignalerInaptitude,
   peutSignerCertificatAptitude,
 } from "@/lib/auth-guards";
 import { obtenirDossierCompletPatient, obtenirSyntheseCommandementPatient } from "@/lib/patients";
@@ -123,6 +125,8 @@ export default async function PatientPage({
   const peutCertifier = peutSignerCertificatAptitude(role);
   const peutOrdonner = peutPrescrire(role);
   const peutConvoquer = peutGenererConvocation(role);
+  const peutSuiviInfirmier = peutCreerConsultationSuiviInfirmier(role);
+  const peutSignaler = peutSignalerInaptitude(role);
 
   // Vue chronologique unifiée : tous les événements du dossier, triés par date décroissante.
   type EvenementTimeline = { date: Date; icone: React.ReactNode; titre: string; sousTitre: string; href: string; badge?: React.ReactNode };
@@ -175,6 +179,21 @@ export default async function PatientPage({
       titre: `Convocation — ${STATUT_CONVOCATION_LABELS[c.statut] ?? c.statut}`,
       sousTitre: `${c.medecin.grade} ${c.medecin.prenom} ${c.medecin.nom}`,
       href: `/dashboard/patients/${patient.id}?onglet=suivi`,
+    })),
+    ...patient.signalements.map((s) => ({
+      date: s.createdAt,
+      icone: <ShieldAlert className="h-4 w-4" />,
+      titre: `Signalement d'inaptitude — ${s.motif}`,
+      sousTitre: `${s.infirmier.grade} ${s.infirmier.prenom} ${s.infirmier.nom}`,
+      href: `/dashboard/patients/${patient.id}?onglet=aptitudes`,
+      badge:
+        s.statut === "EN_ATTENTE" ? (
+          <Badge couleur="amber">En attente d&apos;homologation</Badge>
+        ) : s.statut === "HOMOLOGUE" ? (
+          <Badge couleur="emerald">Homologué</Badge>
+        ) : (
+          <Badge couleur="slate">Rejeté</Badge>
+        ),
     })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -289,6 +308,51 @@ export default async function PatientPage({
 
                 <Card>
                   <CardHeader
+                    title="Signalements d'inaptitude"
+                    icon={<ShieldAlert className="h-4 w-4" />}
+                    action={
+                      peutSignaler && (
+                        <Link
+                          href={`/dashboard/patients/${patient.id}/signalements/nouveau`}
+                          className={bouton("secondaire", "sm")}
+                        >
+                          <FilePlus2 className="h-4 w-4" />
+                          Signaler
+                        </Link>
+                      )
+                    }
+                  />
+                  <CardBody className="space-y-3">
+                    {patient.signalements.length === 0 ? (
+                      <EmptyState title="Aucun signalement d'inaptitude" />
+                    ) : (
+                      patient.signalements.map((s) => (
+                        <RecordCard
+                          key={s.id}
+                          title={s.motif}
+                          lines={[
+                            `Déclaré par ${s.infirmier.grade} ${s.infirmier.prenom} ${s.infirmier.nom} le ${formatDateFr(s.createdAt)}`,
+                            s.observations,
+                            s.medecin && `Traité par ${s.medecin.grade} ${s.medecin.prenom} ${s.medecin.nom}`,
+                            s.commentaireMedecin,
+                          ]}
+                          badges={
+                            s.statut === "EN_ATTENTE" ? (
+                              <Badge couleur="amber">En attente d&apos;homologation</Badge>
+                            ) : s.statut === "HOMOLOGUE" ? (
+                              <Badge couleur="emerald">Homologué</Badge>
+                            ) : (
+                              <Badge couleur="slate">Rejeté</Badge>
+                            )
+                          }
+                        />
+                      ))
+                    )}
+                  </CardBody>
+                </Card>
+
+                <Card>
+                  <CardHeader
                     title="Certificats de suivi des aptitudes"
                     icon={<FileCheck2 className="h-4 w-4" />}
                     action={
@@ -369,13 +433,13 @@ export default async function PatientPage({
                     title="Consultations"
                     icon={<Stethoscope className="h-4 w-4" />}
                     action={
-                      peutEditer && (
+                      (peutEditer || peutSuiviInfirmier) && (
                         <Link
                           href={`/dashboard/patients/${patient.id}/consultations/nouveau`}
                           className={bouton("secondaire", "sm")}
                         >
                           <FilePlus2 className="h-4 w-4" />
-                          Nouvelle
+                          {peutEditer ? "Nouvelle" : "Nouveau suivi infirmier"}
                         </Link>
                       )
                     }
@@ -396,12 +460,15 @@ export default async function PatientPage({
                                 `Diagnostic : ${c.diagnostic || "non renseigné"}`,
                               ]}
                               badges={
-                                c.piecesJointes.length > 0 && (
-                                  <Badge couleur="slate">
-                                    <Paperclip className="mr-1 inline h-3 w-3" />
-                                    {c.piecesJointes.length}
-                                  </Badge>
-                                )
+                                <>
+                                  {c.type === "SUIVI_INFIRMIER" && <Badge couleur="emerald">Suivi infirmier</Badge>}
+                                  {c.piecesJointes.length > 0 && (
+                                    <Badge couleur="slate">
+                                      <Paperclip className="mr-1 inline h-3 w-3" />
+                                      {c.piecesJointes.length}
+                                    </Badge>
+                                  )}
+                                </>
                               }
                               action={
                                 <Link href={`/dashboard/patients/${patient.id}/consultations/${c.id}`} className={bouton("secondaire", "sm")}>

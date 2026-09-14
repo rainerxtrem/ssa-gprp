@@ -3,7 +3,12 @@ import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { Activity, Paperclip, Pencil, Stethoscope } from "lucide-react";
 import { authOptions } from "@/lib/auth";
-import { peutEcrireDossierMedical, peutLireDossierMedical, peutSupprimerDefinitivement } from "@/lib/auth-guards";
+import {
+  peutCreerConsultationSuiviInfirmier,
+  peutEcrireDossierMedical,
+  peutLireDossierMedical,
+  peutSupprimerDefinitivement,
+} from "@/lib/auth-guards";
 import { prisma } from "@/lib/prisma";
 import { formatDateHeureFr } from "@/lib/format";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -23,6 +28,7 @@ export default async function ConsultationDetailPage({
   const { id, consultationId } = await params;
   const session = await getServerSession(authOptions);
   const role = session!.user.role;
+  const userId = session!.user.id;
 
   if (!peutLireDossierMedical(role)) notFound();
 
@@ -39,7 +45,12 @@ export default async function ConsultationDetailPage({
   });
   if (!consultation || consultation.patientId !== id) notFound();
 
-  const peutEditer = peutEcrireDossierMedical(role) && !consultation.annuleLe;
+  const peutEditer =
+    (peutEcrireDossierMedical(role) ||
+      (peutCreerConsultationSuiviInfirmier(role) &&
+        consultation.type === "SUIVI_INFIRMIER" &&
+        consultation.medecinId === userId)) &&
+    !consultation.annuleLe;
 
   const constantes: { label: string; valeur: string }[] = [];
   if (consultation.temperature) constantes.push({ label: "Température", valeur: `${consultation.temperature} °C` });
@@ -75,6 +86,7 @@ export default async function ConsultationDetailPage({
           {consultation.patient.grade} {consultation.patient.nom} {consultation.patient.prenom} — reçu(e) par{" "}
           {consultation.medecin.grade} {consultation.medecin.prenom} {consultation.medecin.nom}
         </span>
+        {consultation.type === "SUIVI_INFIRMIER" && <Badge couleur="emerald">Suivi infirmier</Badge>}
         {consultation.annuleLe && <Badge couleur="red">Annulée</Badge>}
       </div>
 

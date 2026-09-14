@@ -19,7 +19,11 @@ export type ActionAudit =
   | "CERTIFICAT_SUPPRIME"
   | "ARRET_CREE"
   | "CONVOCATION_CREEE"
-  | "CONVOCATION_MODIFIEE";
+  | "CONVOCATION_MODIFIEE"
+  | "SIGNALEMENT_CREE"
+  | "SIGNALEMENT_HOMOLOGUE"
+  | "SIGNALEMENT_REJETE"
+  | "REFERENT_MODIFIE";
 
 export const LIBELLES_ACTION_AUDIT: Record<ActionAudit, string> = {
   PATIENT_CREE: "Dossier patient créé",
@@ -41,6 +45,10 @@ export const LIBELLES_ACTION_AUDIT: Record<ActionAudit, string> = {
   ARRET_CREE: "Arrêt / exemption créé",
   CONVOCATION_CREEE: "Convocation créée",
   CONVOCATION_MODIFIEE: "Convocation modifiée",
+  SIGNALEMENT_CREE: "Signalement d'inaptitude déclaré",
+  SIGNALEMENT_HOMOLOGUE: "Signalement d'inaptitude homologué",
+  SIGNALEMENT_REJETE: "Signalement d'inaptitude rejeté",
+  REFERENT_MODIFIE: "Médecin référent d'unité modifié",
 };
 
 /**

@@ -4,7 +4,40 @@ export interface ModeleConsultation {
   examenClinique?: string;
   diagnostic?: string;
   conduiteATenir?: string;
+  /** Réservé au suivi infirmier autonome (maladie chronique, post-pathologie). */
+  suiviInfirmier?: boolean;
 }
+
+/** Modèles pour le suivi infirmier autonome — jamais de conclusion d'aptitude. */
+export const MODELES_SUIVI_INFIRMIER: ModeleConsultation[] = [
+  {
+    motif: "Suivi asthme",
+    anamnese: "Point d'évolution : fréquence des crises, observance du traitement de fond, facteurs déclenchants.",
+    examenClinique: "Auscultation pulmonaire, débit expiratoire de pointe si disponible.",
+    conduiteATenir: "Rappel des règles hygiéno-diététiques et de l'observance. Orientation médecin si signe d'aggravation.",
+    suiviInfirmier: true,
+  },
+  {
+    motif: "Suivi diabète",
+    anamnese: "Point sur l'équilibre glycémique, observance du traitement, signes d'hypo/hyperglycémie.",
+    examenClinique: "Glycémie capillaire, examen des points d'injection si insulinothérapie, état cutané des pieds.",
+    conduiteATenir: "Renforcement de l'éducation thérapeutique. Orientation médecin si déséquilibre persistant.",
+    suiviInfirmier: true,
+  },
+  {
+    motif: "Suivi post-opératoire",
+    anamnese: "Évolution depuis l'intervention, douleur, reprise progressive des activités.",
+    examenClinique: "Aspect de la cicatrice, absence de signe infectieux local.",
+    conduiteATenir: "Poursuite des soins de plaie prescrits. Orientation médecin si signe d'infection ou de complication.",
+    suiviInfirmier: true,
+  },
+  {
+    motif: "Pansement / soins de plaie",
+    examenClinique: "Aspect de la plaie, exsudat, berges, signes inflammatoires.",
+    conduiteATenir: "Réfection du pansement selon protocole. Orientation médecin si absence d'amélioration.",
+    suiviInfirmier: true,
+  },
+];
 
 export const MODELES_CONSULTATION: ModeleConsultation[] = [
   {

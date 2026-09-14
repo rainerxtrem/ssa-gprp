@@ -189,8 +189,75 @@ export async function obtenirDossierCompletPatient(patientId: string) {
         take: 100,
         include: { utilisateur: { select: { nom: true, prenom: true, grade: true } } },
       },
+      signalements: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          infirmier: { select: { nom: true, prenom: true, grade: true } },
+          medecin: { select: { nom: true, prenom: true, grade: true } },
+        },
+      },
     },
   });
+}
+
+/**
+ * File d'attente d'homologation pour un médecin : tous les signalements
+ * d'inaptitude en attente, avec indication du médecin référent de l'unité
+ * du patient (pour orienter sans jamais empêcher un autre médecin d'agir).
+ */
+export async function listerSignalementsEnAttente() {
+  const [signalements, referents] = await Promise.all([
+    prisma.signalementInaptitude.findMany({
+      where: { statut: "EN_ATTENTE" },
+      orderBy: { createdAt: "asc" },
+      include: {
+        patient: { select: { id: true, nom: true, prenom: true, grade: true, unite: true } },
+        infirmier: { select: { nom: true, prenom: true, grade: true } },
+      },
+    }),
+    prisma.uniteReferent.findMany({
+      include: { medecin: { select: { id: true, nom: true, prenom: true, grade: true } } },
+    }),
+  ]);
+
+  const referentParUnite = new Map(referents.map((r) => [r.unite, r.medecin]));
+
+  return signalements.map((s) => ({
+    ...s,
+    referent: referentParUnite.get(s.patient.unite) ?? null,
+  }));
+}
+
+/** Suivi infirmier autonome : patients qu'un paramédical donné a récemment suivis. */
+export async function listerPatientsEnSuiviInfirmier(infirmierId: string) {
+  const consultations = await prisma.consultation.findMany({
+    where: { medecinId: infirmierId, type: "SUIVI_INFIRMIER", annuleLe: null },
+    orderBy: { dateConsultation: "desc" },
+    select: {
+      dateConsultation: true,
+      motif: true,
+      patient: { select: { id: true, nom: true, prenom: true, grade: true, unite: true } },
+    },
+  });
+
+  const parPatient = new Map<string, { patient: (typeof consultations)[number]["patient"]; derniereConsultation: Date; motif: string; nbConsultations: number }>();
+  for (const c of consultations) {
+    const existant = parPatient.get(c.patient.id);
+    if (existant) {
+      existant.nbConsultations += 1;
+    } else {
+      parPatient.set(c.patient.id, {
+        patient: c.patient,
+        derniereConsultation: c.dateConsultation,
+        motif: c.motif,
+        nbConsultations: 1,
+      });
+    }
+  }
+
+  return Array.from(parPatient.values()).sort(
+    (a, b) => b.derniereConsultation.getTime() - a.derniereConsultation.getTime()
+  );
 }
 
 /** Historique des versions d'un document précis (créations/modifications/annulations). */

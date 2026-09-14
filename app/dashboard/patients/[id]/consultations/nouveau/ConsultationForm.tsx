@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Field, FieldTextarea } from "@/components/ui/Field";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { bouton, champClasses, labelClasses } from "@/lib/ui";
-import { MODELES_CONSULTATION } from "@/lib/consultationTemplates";
+import { MODELES_CONSULTATION, MODELES_SUIVI_INFIRMIER } from "@/lib/consultationTemplates";
+import { ShieldAlert } from "lucide-react";
 
 export interface ConsultationValeurs {
   motif: string;
@@ -42,16 +43,21 @@ export default function ConsultationForm({
   mode = "creer",
   consultationId,
   valeursInitiales,
+  forcerSuiviInfirmier = false,
 }: {
   patientId: string;
   mode?: "creer" | "modifier";
   consultationId?: string;
   valeursInitiales?: ConsultationValeurs;
+  /** Un paramédical ne peut créer/modifier qu'une consultation de suivi infirmier. */
+  forcerSuiviInfirmier?: boolean;
 }) {
   const router = useRouter();
   const [champs, setChamps] = useState<ConsultationValeurs>(valeursInitiales ?? VALEURS_VIDES);
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
+
+  const modeles = forcerSuiviInfirmier ? MODELES_SUIVI_INFIRMIER : MODELES_CONSULTATION;
 
   function maj(champ: keyof ConsultationValeurs, valeur: string) {
     setChamps((c) => ({ ...c, [champ]: valeur }));
@@ -59,7 +65,7 @@ export default function ConsultationForm({
 
   function appliquerModele(indexStr: string) {
     if (indexStr === "") return;
-    const modele = MODELES_CONSULTATION[Number(indexStr)];
+    const modele = modeles[Number(indexStr)];
     if (!modele) return;
     setChamps((c) => ({
       ...c,
@@ -84,6 +90,7 @@ export default function ConsultationForm({
 
     const payload = {
       ...(mode === "creer" ? { patientId } : {}),
+      ...(forcerSuiviInfirmier ? { type: "SUIVI_INFIRMIER" as const } : {}),
       motif: champs.motif,
       anamnese: champs.anamnese || undefined,
       examenClinique: champs.examenClinique || undefined,
@@ -125,13 +132,24 @@ export default function ConsultationForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      {forcerSuiviInfirmier && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 print:hidden">
+          <ShieldAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <p>
+            Suivi infirmier autonome : pour un problème de santé courant ou une pathologie chronique déjà connue.
+            En cas de suspicion d&apos;inaptitude, ne concluez pas ici — utilisez « Signaler une suspicion
+            d&apos;inaptitude » depuis le dossier patient pour qu&apos;un médecin homologue la décision.
+          </p>
+        </div>
+      )}
+
       {mode === "creer" && (
         <Card>
           <CardBody>
             <span className={labelClasses}>Modèle de consultation (facultatif)</span>
             <select defaultValue="" onChange={(e) => appliquerModele(e.target.value)} className={champClasses}>
               <option value="">Aucun — saisie libre</option>
-              {MODELES_CONSULTATION.map((m, i) => (
+              {modeles.map((m, i) => (
                 <option key={m.motif} value={i}>
                   {m.motif}
                 </option>
@@ -173,7 +191,13 @@ export default function ConsultationForm({
       <Card>
         <CardHeader title="Conclusion" />
         <CardBody className="space-y-4">
-          <FieldTextarea label="Diagnostic" name="diagnostic" rows={3} value={champs.diagnostic} onChange={(e) => maj("diagnostic", e.target.value)} />
+          <FieldTextarea
+            label={forcerSuiviInfirmier ? "Observations d'évolution" : "Diagnostic"}
+            name="diagnostic"
+            rows={3}
+            value={champs.diagnostic}
+            onChange={(e) => maj("diagnostic", e.target.value)}
+          />
           <FieldTextarea
             label="Conduite à tenir"
             name="conduiteATenir"

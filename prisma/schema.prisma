@@ -67,27 +67,42 @@ enum StatutConvocation {
   ABSENT
 }
 
+/// MEDICALE : consultation de médecine classique (médicaux uniquement).
+/// SUIVI_INFIRMIER : suivi autonome par un paramédical (maladie chronique,
+/// suivi post-pathologie) — ne peut jamais conclure à une inaptitude sans
+/// passer par un SignalementInaptitude homologué par un médecin.
+enum TypeConsultation {
+  MEDICALE
+  SUIVI_INFIRMIER
+}
+
+enum StatutSignalement {
+  EN_ATTENTE
+  HOMOLOGUE
+  REJETE
+}
+
 // ---------------------------------------------------------------------------
 // MODELS
 // ---------------------------------------------------------------------------
 
 model User {
-  id           String   @id @default(cuid())
+  id           String  @id @default(cuid())
   nom          String
   prenom       String
-  email        String   @unique
+  email        String  @unique
   passwordHash String
   role         Role
   grade        String
-  actif        Boolean  @default(true)
+  actif        Boolean @default(true)
 
   // Signature manuscrite (PNG fond transparent), apposée automatiquement
   // sur les certificats et ordonnances générés par cet utilisateur.
-  signature       Bytes?
+  signature        Bytes?
   signatureAjoutee DateTime?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   profilsSigycopEvalues ProfilSigycop[]            @relation("MedecinProfilsSigycop")
   certificatsEngagement CertificatEngagement[]     @relation("MedecinCertificatsEngagement")
@@ -98,6 +113,13 @@ model User {
   convocations          Convocation[]              @relation("MedecinConvocations")
   journalEntries        JournalAudit[]             @relation("AuteurJournal")
   piecesJointesAjoutees PieceJointe[]              @relation("AjouteParPieceJointe")
+
+  // Circuit d'homologation infirmier → médecin (voir SignalementInaptitude).
+  signalementsDeclares SignalementInaptitude[] @relation("InfirmierSignalements")
+  signalementsTraites  SignalementInaptitude[] @relation("MedecinSignalements")
+
+  // Unités dont cet utilisateur (médecin) est le référent désigné.
+  unitesReferentes UniteReferent[]
 
   @@map("users")
 }
@@ -117,8 +139,8 @@ model Patient {
   antecedents String? @db.Text
   allergies   String? @db.Text
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   profilsSigycop        ProfilSigycop[]
   certificatsEngagement CertificatEngagement[]
@@ -128,6 +150,7 @@ model Patient {
   arretsTravail         ArretTravail[]
   convocations          Convocation[]
   journalEntries        JournalAudit[]
+  signalements          SignalementInaptitude[]
 
   @@map("patients")
 }
@@ -145,7 +168,7 @@ model ProfilSigycop {
   p              Int      @default(1)
   dateEvaluation DateTime @default(now())
 
-  medecin   User   @relation("MedecinProfilsSigycop", fields: [medecinId], references: [id])
+  medecin   User    @relation("MedecinProfilsSigycop", fields: [medecinId], references: [id])
   medecinId String
   patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
   patientId String
@@ -195,15 +218,15 @@ model CertificatEngagement {
   dateCertificat DateTime             @default(now())
 
   // PDF généré à la création et stocké directement dans le dossier du patient.
-  pdf          Bytes?
-  pdfGenereLe  DateTime?
+  pdf         Bytes?
+  pdfGenereLe DateTime?
 
   // Annulation : le document reste dans le dossier (traçabilité) mais n'est
   // plus pris en compte dans les statuts (aptitude, etc.).
   annuleLe    DateTime?
   annuleMotif String?   @db.Text
 
-  medecin          User   @relation("MedecinCertificatsEngagement", fields: [medecinId], references: [id])
+  medecin          User    @relation("MedecinCertificatsEngagement", fields: [medecinId], references: [id])
   medecinId        String
   medecinSignature String? // dataURL/base64 ou référence vers un fichier de signature
 
@@ -247,21 +270,21 @@ model CertificatSuiviAptitudes {
   opex                 AptitudeStatus @default(NON_EVALUE)
   contreIndicationEPMS Boolean        @default(false)
 
-  observations   String?          @db.Text
+  observations   String?         @db.Text
   conclusion     ConclusionSuivi
   lieu           String
-  dateCertificat DateTime         @default(now())
+  dateCertificat DateTime        @default(now())
 
   // PDF généré à la création et stocké directement dans le dossier du patient.
-  pdf          Bytes?
-  pdfGenereLe  DateTime?
+  pdf         Bytes?
+  pdfGenereLe DateTime?
 
   // Annulation : le document reste dans le dossier (traçabilité) mais n'est
   // plus pris en compte dans les statuts (aptitude, etc.).
   annuleLe    DateTime?
   annuleMotif String?   @db.Text
 
-  medecin          User   @relation("MedecinCertificatsSuivi", fields: [medecinId], references: [id])
+  medecin          User    @relation("MedecinCertificatsSuivi", fields: [medecinId], references: [id])
   medecinId        String
   medecinSignature String?
 
@@ -271,6 +294,10 @@ model CertificatSuiviAptitudes {
   profilSigycop   ProfilSigycop? @relation(fields: [profilSigycopId], references: [id])
   profilSigycopId String?
 
+  // Renseigné lorsque ce certificat homologue un signalement d'inaptitude
+  // déclaré par un paramédical (voir SignalementInaptitude).
+  signalementOrigine SignalementInaptitude?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -278,15 +305,69 @@ model CertificatSuiviAptitudes {
   @@map("certificats_suivi_aptitudes")
 }
 
+/// Circuit d'homologation SSA : un paramédical peut assurer le suivi médical
+/// courant (maladie chronique, post-pathologie) mais ne signe jamais de
+/// certificat d'aptitude. S'il repère une suspicion d'inaptitude pendant ce
+/// suivi, il la signale ici ; un médecin doit ensuite l'homologuer (ce qui
+/// génère le certificat officiel) ou la rejeter. Traçabilité intégrale :
+/// qui a repéré, qui a tranché.
+model SignalementInaptitude {
+  id String @id @default(cuid())
+
+  motif          String
+  observations   String?           @db.Text
+  recommandation AptitudeStatus    @default(NON_EVALUE)
+  statut         StatutSignalement @default(EN_ATTENTE)
+
+  commentaireMedecin String?   @db.Text
+  traiteLe           DateTime?
+
+  infirmier   User   @relation("InfirmierSignalements", fields: [infirmierId], references: [id])
+  infirmierId String
+
+  medecin   User?   @relation("MedecinSignalements", fields: [medecinId], references: [id])
+  medecinId String?
+
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId String
+
+  // Certificat officiel généré lors de l'homologation.
+  certificatSuivi   CertificatSuiviAptitudes? @relation(fields: [certificatSuiviId], references: [id])
+  certificatSuiviId String?                   @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId])
+  @@index([statut])
+  @@map("signalements_inaptitude")
+}
+
+/// Médecin référent désigné pour une unité : oriente les signalements
+/// d'inaptitude et le suivi vers le bon interlocuteur. Géré par le médecin-chef.
+model UniteReferent {
+  id    String @id @default(cuid())
+  unite String @unique
+
+  medecin   User   @relation(fields: [medecinId], references: [id])
+  medecinId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("unites_referentes")
+}
+
 /// Consultation de médecine classique (motif, examen clinique, constantes, diagnostic).
 /// Distincte des certificats d'aptitude : c'est le suivi médical courant du patient.
 model Consultation {
-  id               String   @id @default(cuid())
-  dateConsultation DateTime @default(now())
+  id               String           @id @default(cuid())
+  dateConsultation DateTime         @default(now())
+  type             TypeConsultation @default(MEDICALE)
 
-  motif           String
-  anamnese        String? @db.Text
-  examenClinique  String? @db.Text
+  motif          String
+  anamnese       String? @db.Text
+  examenClinique String? @db.Text
 
   // Constantes relevées pendant la consultation
   temperature        Float?
@@ -297,8 +378,8 @@ model Consultation {
   poids              Float?
   taille             Float?
 
-  diagnostic      String? @db.Text
-  conduiteATenir  String? @db.Text
+  diagnostic     String? @db.Text
+  conduiteATenir String? @db.Text
 
   annuleLe    DateTime?
   annuleMotif String?   @db.Text
@@ -371,10 +452,10 @@ model ArretTravail {
 /// Convocation à une visite médicale. Alimente le statut de visite exposé
 /// au COMMANDEMENT ("Planifiée le DD/MM/YYYY") sans jamais exposer le motif.
 model Convocation {
-  id               String            @id @default(cuid())
-  dateConvocation  DateTime
-  motif            String?           @db.Text
-  statut           StatutConvocation @default(PLANIFIEE)
+  id              String            @id @default(cuid())
+  dateConvocation DateTime
+  motif           String?           @db.Text
+  statut          StatutConvocation @default(PLANIFIEE)
 
   medecin   User   @relation("MedecinConvocations", fields: [medecinId], references: [id])
   medecinId String

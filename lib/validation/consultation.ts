@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const champsConsultationSchema = z.object({
+  type: z.enum(["MEDICALE", "SUIVI_INFIRMIER"]).optional(),
   motif: z.string().min(1, "Le motif de consultation est requis."),
   anamnese: z.string().max(4000).optional(),
   examenClinique: z.string().max(4000).optional(),
